@@ -1,12 +1,17 @@
 from inserter import Inserter,HashLevel
+import logging
 
 class NoneLeft(Exception): pass
 
 
 class Extracter(Inserter):
+    def __init__(self,keyLength,graph,root,depth):
+        super().__init__(keyLength,graph)
+        self.levels = [HashLevel() for i in range(depth+1)]
+        self.levels[-1].append(root)
     def keySplit(self,b):
         for i in range(int(len(b)/self.keyLength)):
-            yield b[i*keyLength:(i+1)*self.keyLength]
+            yield b[i*self.keyLength:(i+1)*self.keyLength]
     def decrement(self,level=0):
         """This is not strict subtraction, because ideally we'd like to extract
  * the file from start to end, not from end to start.
@@ -14,9 +19,11 @@ class Extracter(Inserter):
  * to 0, it goes up from 0 to num. Otherwise it's pretty much like
  * subtraction...
 """
+        logging.info("len {}".format(len(self.levels)))
         if len(self.levels) <= level:
             raise NoneLeft()
         platform = self.levels[level]
+        logging.info("Plat {} {}".format(platform,level))
         if len(platform) == 0:
             # this platform's empty. Let's borrow from above to fill it
             # up again with the next level's keyes
@@ -30,6 +37,7 @@ class Extracter(Inserter):
             borrow = False
             while not borrow:
                 borrow = self.decrement(level+1)
+                logging.info("borrow {} {}".format(borrow,level))
             # ok we subtracted out a key. Now extract it into the platform!
             if level == 0:
                 ctr = 0
@@ -39,5 +47,10 @@ class Extracter(Inserter):
             ctr += len(platform)
             # now ctr is what totalNum *would be*
             # make sure to mutate here.
-            platform.extend(keySplit(self.requestPiece(borrow,ctr,level)))
+            platform.extend(self.keySplit(self.requestPiece(borrow,ctr,level)))
         return platform.pop(0)
+    def __iter__(self):
+        return self
+    def __next__(self):
+        try: return self.decrement()
+        except NoneLeft: raise StopIteration
