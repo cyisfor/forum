@@ -1,10 +1,10 @@
-import inserter,extracter
+import generic,extracter
 import shelve
 import graph
 from hashlib import md5
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 def makeHash(b):
     h = md5(b)
@@ -12,13 +12,11 @@ def makeHash(b):
 
 shelf = shelve.open("pieces.shelve")
 
-with graph("graph.dot") as agraph:
-    assert agraph
-    graph = agraph
+with graph("graph.dot") as graph:
     #for k,v in shelf.items():
     #    print(k,v)
 
-    class MyInserter(inserter.Inserter):
+    class MyInserter(generic.Inserter):
         def __init__(self):
             super().__init__(len(makeHash(b'')),graph)
         def insertPiece(self,piece,ctr,level):
@@ -26,21 +24,31 @@ with graph("graph.dot") as agraph:
             shelf[hashthh.decode()] = piece
             return hashthh
 
-    class MyExtracter(extracter.Extracter):
+    class MyExtracter(generic.Extracter):
         def __init__(self,root,depth):
             super().__init__(len(makeHash(b'')),graph,root,depth)
         def requestPiece(self,hashthh,ctr,level):
             piece = shelf.get(hashthh.decode())
-            logging.info("requesting {} {} {} {}".format(hashthh,piece,ctr,level))
             return piece
 
 
     inserter = MyInserter()
-    inserter += makeHash(b'23')
-    inserter += makeHash(b'42')
-    inserter += makeHash(b'23')
+    inserter.add(b'23'*5)
+    inserter.add(b'42'*10);
+    inserter.add(b'23'* 5);
     root,depth = inserter.finish()
     extractor = MyExtracter(root,depth)
     for piece in extractor:
         print("Extracted",piece)
+    with open("test.png","rb") as inp:
+        buf = bytearray(inserter.maximumPieceSize)
+        while True:
+            amt = inp.readinto(buf)
+            if not amt: break
+            inserter.add(buf[:amt])
+    root,depth = inserter.finish()
+    extractor = MyExtracter(root,depth)
+    with open("result.png","wb") as out:
+        for piece in extractor:
+            out.write(piece)
     shelf.close()

@@ -10,7 +10,7 @@ def make(path):
             self.sigh = set()
             out.write("digraph extraction {\n")
         def hexlify(self,b):
-            return self.rawhexlify(b).decode()
+            return b.decode()
         def update(self,parent,child):
             self.sigh.add(parent)
             self.sigh.add(child)

@@ -13,45 +13,55 @@ class Inserter:
         self.graph = graph
         self.keyLength = keyLength
         self.keysPerPiece = int(self.maximumPieceSize / self.keyLength)
-    def __iadd__(self,key):
+    def add(self,key):
         self.addLevel(key,0)
         return self
     def addLevel(self,key,level):
-        logging.info("Kl{} {}".format(key,level))
         if len(self.levels) == level:
             self.levels.append(HashLevel())
         # make room for the key first
         bottom = self.maybeCarry(level)
         bottom.append(key)
-        bottom.totalNum += 1
+        logging.info("Added {}".format(key))
         return bottom
     def maybeCarry(self,level):
         platform = self.levels[level]
+        logging.info("levels {}".format(self.levels))
+        logging.info("finalizing? {} {} {}".format(self.finalizing,len(platform),level))
         if ( self.finalizing and len(platform) > 1 ) or ( len(platform) == self.keysPerPiece ):
+            logging.info("We need to carry")
             ctr = platform.totalNum
-            newkey = self.insertPiece(b''.join(platform),ctr,level)
+            newkey = self.insertPiece(b''.join(platform),ctr,level+1)
             if self.graph:
                 for hash in platform:
                     self.graph.update(newkey,hash)
             platform.clear()
+            logging.info("Carried a level to {}".format(newkey))
             finalizing = self.finalizing
             if finalizing:
                 self.finalizing = False
-            platform = self.addLevel(newkey,level+1)
+            self.addLevel(newkey,level+1)
             if finalizing:
                 self.finalizing = True
         return platform
     def finish(self):
         self.finalizing = True
-        platform = None
+        level = 0
+        while level < len(self.levels):
+            bottom = self.maybeCarry(level)
+            #if len(bottom)==1:
+            #    logging.info("Found root {} {}".format(bottom,self.levels))
+            #    break
+            level = level + 1
+            hack = len(self.levels)
+        level -= 1
         depth = len(self.levels)
-        for level in range(depth):
-            platform = self.maybeCarry(level)
-            if len(platform) == 1: break
-        pprint(self.levels)
+        logging.info("depth {} {}".format(depth,level))
+        platform = self.levels[level]
         assert platform
         result = platform[0]
         self.levels = []
+        self.finalizing = False
         gc.collect()
         return result,depth
     def insertPiece(self,piece,ctr,level):
