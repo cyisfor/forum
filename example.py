@@ -16,6 +16,7 @@ with graph("graph.dot") as graph:
     #for k,v in shelf.items():
     #    print(k,v)
 
+
     class MyInserter(generic.Inserter):
         def __init__(self):
             super().__init__(len(makeHash(b'')),graph)
@@ -31,24 +32,17 @@ with graph("graph.dot") as graph:
             piece = shelf.get(hashthh.decode())
             return piece
 
-
     inserter = MyInserter()
-    inserter.add(b'23'*5)
-    inserter.add(b'42'*10);
-    inserter.add(b'23'* 5);
-    root,depth = inserter.finish()
-    extractor = MyExtracter(root,depth)
-    for piece in extractor:
-        print("Extracted",piece)
-    buf = memory.extract(MyExtracter(root,depth))
-    print("Extracted to memory",buf)
-    with open("test.png","rb") as inp:
-        buf = bytearray(inserter.maximumPieceSize)
-        while True:
-            amt = inp.readinto(buf)
-            if not amt: break
-            inserter.add(buf[:amt])
-    root,depth = inserter.finish()
+
+    publicKey = crypto.makeKey(inserter)
+    # publicKey = b'123441251351'
+    def subInsert(inserter):
+        with open("test.png","rb") as inp:
+            root = inserter.add(inp)
+        root = metafile.insert(inserter,root,"test.png","image/png","A test (also porn)")
+        return root,[publicKey]
+    root = crypto.insert(inserter,subInsert)
+    root = crypto.sign(inserter,publicKey,root)
     extractor = MyExtracter(root,depth)
     with open("result.png","wb") as out:
         for piece in extractor:

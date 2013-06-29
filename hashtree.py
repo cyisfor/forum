@@ -19,9 +19,20 @@ class Extracter:
             yield b[i*self.keyLength:(i+1)*self.keyLength]
     def extract(self,piece,breadth,depth):
         if depth == 0:
+            self.finish(piece,breadth,-1)
             return
         for i,hash in enumerate(self.keySplit(piece)):
-            ctr = breadth*self.hashesPerPiece+i
-            piece = yield self.requester.requestPiece(hash,ctr,depth-1)
-            yield self.extract(piece,ctr,depth-1)
-    def leaf(self,piece,ctr,level): pass
+            yield self.requester.requestPiece(self.extract,breadth*self.hashesPerPiece+i,depth-1)
+    def finish(self,piece,ctr,level): pass
+
+class Inserter:
+    def insert(self,depth):
+        hashes = []
+        breadth = 0
+        while not self.done:
+            hashes.append(self.insertPiece(yield,breadth,depth))
+            if len(hashes)==self.hashesPerPiece:
+                if not self.sub:
+                    self.sub = copy.copy(self)
+                    self.sub.send(...with(self.sub.insert(......
+
