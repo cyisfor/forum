@@ -1,38 +1,54 @@
 import inserter,extracter
+import requester
+
+from deferred import inlineCallbacks,returnValue
+
 import logging
+from itertools import count
 
 class Inserter(inserter.Inserter):
     ctr = 0
     def addPiece(self,piece):
-        hasht = self.insertPiece(piece,self.ctr,0)
-        logging.debug("leaf piece {}".format(piece))
-        self.ctr += 1
-        super().add(hasht)
-        return self
+        ret = self.insertPiece(piece,self.ctr,-1).addCallback(self.addLevel,0)
+        return ret
+    @inlineCallbacks
     def addFile(self,inp):
-        buf = bytearray(self.maximumPieceSize)
+        piece = bytearray(requester.maximumPieceSize)
+        counter = count(0)
         while True:
-            amt = inp.readinto(buf)
+            where = inp.tell()
+            amt = inp.readinto(piece)
             if not amt: break
-            self.addPiece(buf[:amt])
-
-        return self.finish()
+            ctr = next(counter)
+            logging.info('reading piece %x %x %x %s',ctr,ctr*requester.maximumPieceSize,where,piece[:5])
+            yield self.addPiece(piece[:amt])
+        ret = yield self.finish()
+        returnValue(ret)
+    @inlineCallbacks
     def addPieces(self,pieces):
-        for i in range(len(pieces)/self.maximumPieceSize+1):
-            self.addPiece(pieces[i*self.maximumPieceSize,(i+1)*self.maximumPieceSize])
-        return self.finish()
+        for i in range(int(len(pieces)/requester.maximumPieceSize+1)):
+            yield self.addPiece(pieces[i*requester.maximumPieceSize:(i+1)*requester.maximumPieceSize])
+        ret = yield self.finish()
+        returnValue(ret)
     def add(self,thing):
         if hasattr(thing,'readinto'):
             return self.addFile(thing)
         return self.addPieces(thing)
 
-class Extracter(extracter.Extracter):
-    ctr = 0
-    def __next__(self):
-        logging.info("derp! {}".format(self.levels))
-        try: hasht = self.decrement()
-        except extracter.NoneLeft:
-            raise StopIteration
-        result = self.requestPiece(hasht,self.ctr,0)
-        self.ctr += 1
-        return result
+def extract(uri,gotPiece):
+    ex = extracter.Extracter()
+    def leafHash(hasht,which):
+        return requester.request(hasht,which,0).addCallback(gotPiece,which)
+    return ex.extract(uri,leafHash)
+
+def extractToFile(dest,uri):
+    out = open(dest,'wb')
+    hack = extracter.Extracter()
+    def writer(piece,which):
+        logging.info('writing piece %x %x %x %s',which,which*requester.maximumPieceSize,len(piece),piece[:5])
+        out.seek(which*requester.maximumPieceSize)
+        out.write(piece)
+        out.flush()
+    def closer(mumble):
+        out.close()
+    return extract(uri,writer)

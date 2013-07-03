@@ -1,5 +1,9 @@
-import inserter,extracter
+import inserter,extracter,requester,flatten,deferred
+import keylib
 import logging
+import time
+
+from flatten import flatten
 
 class NoneLeft(Exception): pass
 
@@ -10,18 +14,38 @@ as well as what level this is...
 """
 
 class Extracter:
-    def __init__(self,requester):
-        self.requester = requester
-        self.hashesPerPiece = int(requester.maximumPieceSize / requester.keyLength)
-        self.keyLength = requester.keyLength
+    def __init__(self):
+        self.keysPerPiece = int(requester.maximumPieceSize / requester.hashSize)
+        self.hashSize = requester.hashSize
     def keySplit(self,b):
-        for i in range(int(len(b)/self.keyLength)):
-            yield b[i*self.keyLength:(i+1)*self.keyLength]
-    def extract(self,piece,breadth,depth):
-        if depth == 0:
-            return
-        for i,hash in enumerate(self.keySplit(piece)):
-            ctr = breadth*self.hashesPerPiece+i
-            piece = yield self.requester.requestPiece(hash,ctr,depth-1)
-            yield self.extract(piece,ctr,depth-1)
-    def leaf(self,piece,ctr,level): pass
+        for i in range(int(len(b)/self.hashSize)):
+            yield keylib.Key(b[i*self.hashSize:(i+1)*self.hashSize])
+    def extract(self,uri,handler):
+        maxDepth=uri[0]
+        # XXX: need the exact offset in pieces from the left
+        def downOneLevel(piece,upperBreadth,level):
+            hashes = list(self.keySplit(piece))
+            if level == 1:
+                @deferred.inlineCallbacks
+                def doop():
+                    for i,hasht in enumerate(hashes):
+                        breadth = upperBreadth*self.keysPerPiece + i
+                        logging.info('breadth %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
+                        yield handler(hasht,breadth)
+                return doop()
+            try:
+                defs = []
+                for i,hasht in enumerate(hashes):
+                    breadth = upperBreadth*self.keysPerPiece + i
+                    logging.info('bread %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
+                    defs.append(requester.request(hasht,breadth,level)
+                            .addCallback(downOneLevel,breadth,level-1))
+                logging.info('%x subs',len(defs))
+            except:
+                import traceback
+                traceback.print_exc()
+                raise
+            return deferred.DeferredList(defs)
+        hasht = keylib.Key(uri[1:])
+        logging.info('uri %s = %x:%s',uri,maxDepth,hasht)
+        return requester.request(hasht,0,maxDepth).addCallback(downOneLevel,0,maxDepth - 1)

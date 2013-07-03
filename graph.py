@@ -1,26 +1,32 @@
+
 from contextlib import contextmanager
 
 @contextmanager
 def make(path):
     class Graph:
         def __init__(self,out):
-            import binascii
-            self.rawhexlify = binascii.hexlify
             self.out = out
             self.sigh = set()
+            self.bs = {}
             out.write("digraph extraction {\n")
-        def hexlify(self,b):
-            return b.decode()
-        def update(self,parent,child):
+            import keylib
+            self.keylib = keylib
+        def update(self,parent,child,breadth):
             self.sigh.add(parent)
             self.sigh.add(child)
-            out.write('"{}" -> '.format(self.hexlify(parent)))
-            out.write("\"{}\";\n".format(self.hexlify(child)))
+            self.bs[child] = breadth
+            out.write('"{}" -> '.format(self.keylib.decode(parent)))
+            out.write("\"{}\";\n".format(self.keylib.decode(child)))
             out.flush()
         def finish(self):
             def writeKey(key):
-                hex = self.hexlify(key)
-                out.write("\"{}\" [label=\"{}\"];\n".format(hex,hex[-4:]))
+                breadth = self.bs.get(key)
+                if breadth is None:
+                    breadth = '?'
+                else:
+                    breadth = '{:x}'.format(breadth)
+                key = self.keylib.decode(key)
+                out.write("\"{}\" [label=\"{}:{}\"];\n".format(key,key[:4],breadth))
             for key in self.sigh:
                 writeKey(key)
             out.write("\n}\n");
