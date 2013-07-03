@@ -43,6 +43,7 @@ class Inserter:
                     for i,hash in enumerate(platform):
                         self.graph.update(newkey,hash,platform.totalNum+i-len(platform))
                 platform.clear()
+                # this is VERY important:
                 if self.finalizing:
                     self.finalizing = False
                     def reFinalize(derp):
@@ -58,7 +59,6 @@ class Inserter:
         logging.debug('finishing')
         self.finalizing = True
         def carriedUp(bottom,level):
-            # XXX: reFinalize... this is a hack
             if level + 1 < len(self.levels):
                 return self.maybeCarry(level+1).addCallback(carriedUp,level+1)
             else:
