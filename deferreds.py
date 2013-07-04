@@ -1,3 +1,7 @@
+import dependencies
+import sys
+sys.path.append('deferred') # XXX: ugh
+dependencies.Import('deferred',dependencies.git('git@github.com:mikeal/deferred.git'))
 import deferred._defer
 import deferred
 

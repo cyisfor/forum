@@ -1,44 +1,15 @@
-from wrapper import Wrapper
-import memory
-from deferred import inlineCallbacks
-
-from contextlib import closing
-import os,subprocess,sys
-import shelve
+import dependencies
 
 ####### Installing dependencies
 
-here = os.path.dirname(os.path.abspath(sys.modules[__name__].__file__))
+dependencies.Import('cffi','pip install cffi')
+dependencies.Import('nacl',dependencies.git('libsodium'))
 
-with open(os.path.join(here,"dependencies.sh"),"wt") as erase: pass
+import cffi.ffiplatform
 
-def run(*commands):
-    with open(os.path.join(here,"dependencies.sh"),"at") as out:
-        for command in commands:
-            out.write(command+"\n")
-    raise SystemExit("Please run dependencies.sh (in "+here+")")
-
-try: import cffi.ffiplatform
-except ImportError:
-    run("pip install cffi")
-
-def installSodium():
-    if os.path.exists("libsodium"):
-        os.chdir("libsodium")
-        subprocess.check_call(["git","pull"])
-    else:
-        subprocess.call(["git","clone","https://github.com/jedisct1/libsodium"])
-        os.chdir("libsodium")
-    subprocess.check_call(["sh","autogen.sh"])
-    subprocess.check_call(["sh","configure"])
-    subprocess.check_call(["make","-j8"])
-    run("cd "+os.path.abspath("."),
-            "make install")
-
-try: from nacl import nacl
-except ImportError:
-    run("pip install pynacl",
-        "echo from nacl import nacl | python")
+try: dependencies.Import('nacl',
+    "pip install pynacl",
+    "echo from nacl import nacl | python")
 except PermissionError:
     run("echo from nacl import nacl | python")
 except cffi.ffiplatform.VerificationError:
@@ -48,10 +19,15 @@ except cffi.ffiplatform.VerificationError:
 
 import generic
 
+from wrapper import Wrapper
+import memory
+from deferred import inlineCallbacks
+
 import nacl.secret
 import nacl.public
 import nacl.utils
 
+from contextlib import closing
 
 # copied from pycrypto
 import struct
