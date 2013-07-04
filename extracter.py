@@ -1,9 +1,7 @@
-import inserter,extracter,flatten,deferred,requester
+import inserter,extracter,deferred,requester
 import keylib
 import logging
 import time
-
-from flatten import flatten
 
 class NoneLeft(Exception): pass
 
@@ -31,22 +29,22 @@ class Extracter(requester.Requester):
                 def doop():
                     for i,hasht in enumerate(hashes):
                         breadth = upperBreadth*self.keysPerPiece + i
-                        logging.info('breadth %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
+                        logging.info(2,'breadth %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
                         yield handler(hasht,breadth)
                 return doop()
             try:
                 defs = []
                 for i,hasht in enumerate(hashes):
                     breadth = upperBreadth*self.keysPerPiece + i
-                    logging.info('bread %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
+                    logging.info(2,'bread %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
                     defs.append(self.requestPiece(hasht,breadth,level)
                             .addCallback(downOneLevel,breadth,level-1))
-                logging.info('%x subs',len(defs))
+                logging.info(2,'%x subs',len(defs))
             except:
                 import traceback
                 traceback.print_exc()
                 raise
             return deferred.DeferredList(defs)
         hasht = keylib.Key(uri[1:])
-        logging.info('uri %s = %x:%s',uri,maxDepth,hasht)
+        logging.info(2,'uri %s = %x:%s',uri,maxDepth,hasht)
         return self.requestPiece(hasht,0,maxDepth).addCallback(downOneLevel,0,maxDepth - 1)

@@ -20,22 +20,22 @@ class Inserter:
         self.keysPerPiece = info.keysPerPiece
         self.maximumPieceSize = info.maximumPieceSize
     def addLevel(self,key,level):
-        logging.debug('addlevel %s at %s -> %s',key,level,self.levels)
+        logging.debug(0,'addlevel %s at %s -> %s',key,level,self.levels)
         assert(key)
         if len(self.levels) == level:
             self.levels.append(HashLevel())
         def bottomderp(bottom):
-            logging.debug('adding %s to %x (%x) %s',key,level,len(self.levels[level]),(bottom is self.levels[level]))
+            logging.debug(1,'adding %s to %x (%x) %s',key,level,len(self.levels[level]),(bottom is self.levels[level]))
             self.levels[level].append(key)
             self.levels[level].totalNum += 1
             return bottom
         # make room for the key first
         return self.maybeCarry(level).addCallback(bottomderp)
     def maybeCarry(self,level):
-        logging.debug('carry %s',self.levels)
+        logging.debug(0,'carry %s',self.levels)
         platform = self.levels[level]
         if ( self.finalizing and (len(platform) > 1 or (len(platform)==1 and level + 1 < len(self.levels)) )) or ( len(platform) >= self.keysPerPiece ):
-            logging.debug('carrying to %x',level+1)
+            logging.debug(1,'carrying to %x',level+1)
             ctr = platform.totalNum
             def gotkey(newkey):
                 if self.graph:
@@ -52,10 +52,10 @@ class Inserter:
                 return self.addLevel(newkey,level+1)
             return self.insertPiece(keylib.join(platform),ctr,level+1).addCallback(gotkey)
         else:
-            logging.debug('nacarry %x %x',level,len(platform))
+            logging.debug(0,'nacarry %x %x',level,len(platform))
         return deferred.succeed(platform)
     def finish(self):
-        logging.debug('finishing')
+        logging.debug(0,'finishing')
         self.finalizing = True
         def carriedUp(bottom,level):
             if level + 1 < len(self.levels):

@@ -20,7 +20,7 @@ def newInit(self,*a,**kw):
     self.debug = True
     self.delayedResult = nada
     oldInit(self,*a,**kw)
-    logging.debug('add %s',self)
+    logging.debug(0,'add %s',self)
     deferreds.add(self)
 deferred.Deferred.__init__ = newInit
 

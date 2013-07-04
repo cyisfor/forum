@@ -17,7 +17,7 @@ except cffi.ffiplatform.VerificationError:
 
 ######### crypto interface starts here
 
-import generic
+import logging
 
 from wrapper import Wrapper
 import memory
@@ -26,8 +26,10 @@ from deferred import inlineCallbacks
 import nacl.secret
 import nacl.public
 import nacl.utils
+import nacl.exceptions
 
 from contextlib import closing
+import shelve
 
 # copied from pycrypto
 import struct
@@ -81,6 +83,7 @@ def bytes_to_long(s):
 
 class Cryptothing(Wrapper):
     def __init__(self,sub,key=None,base=None):
+        self.plainAdd = sub.add
         super().__init__(sub)
         if key:
             self.key = key
@@ -99,17 +102,24 @@ class Inserter(Cryptothing):
     def __init__(self,sub,ext):
         super().__init__(sub)
         self.ext = ext
-    def add(self,uri,recipients):
+    def add(self,subAdd,uri,recipients):
         self.recipients = recipients
-        return self.sub.add(uri)
-    def addPiece(self,piece,ctx,level):
+        return subAdd(uri)
+    def addPiece(self,subAddPiece,piece,ctx,level):
         # make sure ctx,level != 0,0 because that's what ctr the key piece uses.
-        nonce = self.getNonce(ctx+1,level)
-        return self.sub.addPiece(self.box.encrypt(piece,nonce))
-    def finish():
-        uri = self.sub.finish()
+        logging.log(3,'encrypt nonce',ctx+1,level)
+        try:
+           nonce = self.getNonce(ctx+1,level)
+        except AttributeError:
+            print(self)
+            print(dir(self))
+            raise
+        return subAddPiece(self.box.encrypt(piece,nonce))
+    def finish(self,subFinish):
+        uri = subFinish()
         def makeWrapper(uri):
             nonce = self.base
+            logging.log(3,'encrypt nonce 0')
             # fine to reuse the nonce because each key is different
             chash = self.key.encrypt(uri,nonce)
             data = nonce + chash
@@ -128,16 +138,17 @@ class Inserter(Cryptothing):
                         data += nacl.utils.random(len(slot)*(top-i))
                     return data
             def completePiece(piece):
-                return self.sub.add(piece)
+                return self.plainAdd(piece)
             i,recipient = next(guys)
             return extracter.requestPiece(recipient).addCallback(gotKey,i).addCallback(completePiece)
         return uri.addCallback(makeWrapper)
 
 
 class Extracter(Cryptothing):
-    def requestPiece(self,hasht,ctx,level):
-        piece = self.sub.requestPiece(hasht,ctx,level)
-        nonce = self.getNonce(ctx,level)
+    def requestPiece(self,subRequestPiece,hasht,ctx,level):
+        piece = subRequestPiece(hasht,ctx,level)
+        nonce = self.getNonce(ctx+1,level)
+        logging.log(3,'encrypt nonce',ctx+1,level)
         return self.box.decrypt(piece,nonce)
 
 slotSize = nacl.secret.SecretBox.KEY_SIZE + 8;
@@ -154,7 +165,8 @@ def request(nextStep):
                 priv = nacl.public.PrivateKey(priv)
                 pub = priv.public_key
                 box = nacl.public.Box(priv,pub)
-                plain = box.decrypt(slots,nonce)
+                try: plain = box.decrypt(slots,nonce)
+                except nacl.exceptions.CryptoError: continue
                 slots = tuple(slotSplit(slots))
                 for slot in slotSplit(slots):
                     if bytes_to_long(slot[0:8])==0:
@@ -172,7 +184,9 @@ def request(nextStep):
     return Derp()
 
 def context(subins,subreq):
-    return Inserter(subins,subreq),request(subreq)
+    ins,ext = Inserter(subins,subreq),request(subreq)
+    ins.wrap()
+    return ins,ext
 
 
 # dispatcher, if crypto then
