@@ -9,6 +9,7 @@ Each of those pieces can be hashed, and if you put the hashes in order of the pi
 This list of hashes can itself be considered a file then, and broken into pieces. 
 
 So here's an example. We got a file that's O's. We have a hash that turns a piece into one x, and we set the maximum piece size to 3 O's. Here's the file:
+<pre>
 OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
 ...and here it is split into pieces
 OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO O
@@ -20,8 +21,10 @@ x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x
 Concatenate those together, and you've got
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ...which is smaller than the original file!
+</pre>
 
 This is where it's called a hash tree. Now you have a smaller file that can validate the bigger file. How do you validate the smaller file? Recursion is the answer! Now we have a file to split into pieces:
+<pre>
 OOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
 ->
 OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO
@@ -29,6 +32,7 @@ OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO
 x x x x x x x x x x
 ->
 xxxxxxxxxx
+</pre>
 
 By repeating this process, we can continue reducing until our file is smaller than the maximum piece size. Then the entire file can be treated as a single piece (the "root" piece) and its corresponding hash the root hash, can uniquely identify all the levels down to the original file.
 
