@@ -11,17 +11,20 @@ This list of hashes can itself be considered a file then, and broken into pieces
 So here's an example. We got a file that's O's. We have a hash that turns a piece into one x, and we set the maximum piece size to 3 O's. Here's the file:
 <pre>
 OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+</pre>
 ...and here it is split into pieces
-OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO O
+<pre>
+OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO OOO
+OOO OOO OOO OOO OOO O
+</pre>
 Notice the last piece is short, because the file isn't evenly divisible by 3 O's.
 Now you take the hash of each of those pieces, OOO -> x, thus:
-
+<pre>
 x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x
-
-Concatenate those together, and you've got
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-...which is smaller than the original file!
 </pre>
+Concatenate those together, and you've got
+<pre>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</pre>
+...which is smaller than the original file!
 
 This is where it's called a hash tree. Now you have a smaller file that can validate the bigger file. How do you validate the smaller file? Recursion is the answer! Now we have a file to split into pieces:
 <pre>
