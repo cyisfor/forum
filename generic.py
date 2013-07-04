@@ -21,6 +21,7 @@ class Inserter(inserter.Inserter):
             logging.info(1,'reading piece %x %x %x %s',ctr,ctr*self.maximumPieceSize,where,piece[:5])
             yield self.addPiece(piece[:amt],ctr,-1)
         ret = yield self.finish()
+        logging.info(3,'finished with',ret,self.finish)
         returnValue(ret)
     @inlineCallbacks
     def addPieces(self,pieces):

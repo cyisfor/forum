@@ -55,7 +55,7 @@ class Inserter:
             logging.debug(0,'nacarry %x %x',level,len(platform))
         return deferred.succeed(platform)
     def finish(self):
-        logging.debug(0,'finishing')
+        logging.debug(3,'finishing plain')
         self.finalizing = True
         def carriedUp(bottom,level):
             if level + 1 < len(self.levels):

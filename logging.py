@@ -34,7 +34,7 @@ def log(stage,msg,*a):
     if isinstance(msg,str) and '%' in msg:
         msg = msg % a
     else:
-        msg = str(msg) + ' '.join((repr(i) for i in a))
+        msg = str(msg) + ' ' + ' '.join((repr(i) for i in a))
     f = caller()
     sys.stderr.write(str(stage) + ' ' + os.path.basename(f.f_code.co_filename)+'('+str(f.f_lineno)+'): '+msg+"\n")
 

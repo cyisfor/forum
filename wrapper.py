@@ -7,23 +7,35 @@ class Wrapper:
         self.sub = sub
     @logging.skip
     def wrap(self):
-        for name,v in self.__class__.__dict__.items():
-            if name[0]=='_': continue
-            if hasattr(v,'__call__'):
-                logging.log(3,'overriding',name)
-                subv = getattr(self.sub.__class__,name)
-                wrapper,subwrapper = self.makeWrapper(v,subv)
-                setattr(self.__class__,name,wrapper)
-                # boing
-                setattr(self.sub.__class__,name,subwrapper)
-
-    def makeWrapper(self,top,bottom):
+        attrs = {}
+        for klass in reversed(type(self).mro()[:-2]):
+            logging.log(3,'klass',klass)
+            for name,v in klass.__dict__.items():
+                if name[0]=='_': continue
+                if name == 'wrap': continue
+                if hasattr(v,'__call__'):
+                    attrs[name] =v
+                    logging.log(3,'overriding',name)
+        for name,v in attrs.items():
+            try: subv = getattr(self.sub.__class__,name)
+            except AttributeError:
+                logging.log(3,'subv is none')
+                subv = None
+            wrapper = self._makeWrapper(v,subv)
+            setattr(self.__class__,name,wrapper)
+            # boing
+            setattr(self.sub.__class__,name,wrapper)
+    def _makeWrapper(self,top,bottom):
+        if bottom is None:
+            logging.info(3,'simply wrappy',top)
+            def wrapper(sub,*a,**kw):
+                return top(self,*a,**kw)
+            return wrapper
+        bw = lambda *a, **kw: bottom(self.sub,*a,**kw)
         @wraps(bottom)
-        def wrapper(self,*a,**kw):
-            return top(self,lambda *a, **kw: bottom(self.sub,*a,**kw),*a,**kw)
-        def subwrapper(sub,*a,**kw):
-            return bottom(self,*a,**kw)
-        return wrapper,subwrapper
+        def wrapper(sub,*a,**kw):
+            return top(self,bw,*a,**kw)
+        return wrapper
     def __getattr__(self,name):
         v = getattr(self.sub,name)
         setattr(self,name,v)

@@ -114,18 +114,20 @@ class Inserter(Cryptothing):
             print(self)
             print(dir(self))
             raise
-        return subAddPiece(self.box.encrypt(piece,nonce))
+        return subAddPiece(self.box.encrypt(piece,nonce),ctx,level)
     def finish(self,subFinish):
+        logging.info(3,'finishing')
         uri = subFinish()
         def makeWrapper(uri):
             nonce = self.base
-            logging.log(3,'encrypt nonce 0')
             # fine to reuse the nonce because each key is different
-            chash = self.key.encrypt(uri,nonce)
+            chash = self.box.encrypt(uri,nonce)
             data = nonce + chash
             slot = byte(0) * 8 + instracter.key
+            logging.log(3,'nonce is',nonce)
             guys = enumerate(recipients)
             def gotKey(data,i):
+                logging.log(3,'encrypting to ',recipient)
                 key = nacl.public.PublicKey(data)
                 data += key.encrypt(slot,nonce)
                 try:

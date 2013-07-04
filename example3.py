@@ -45,7 +45,7 @@ def example():
         logging.info(2,'got uri '+str(uri))
         return generic.extractToFile(extracter,'test2.dat',uri)
     def gotKey(key,ins):
-        logging.log(3,'got key')
+        logging.log(3,'got key',key)
         ins,ext = crypto.context(ins,Extracter())
         logging.log(5,ins.add)
         inp = open('test.dat','rb')
