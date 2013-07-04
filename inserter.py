@@ -1,4 +1,3 @@
-import requester
 import keylib
 
 import deferred
@@ -15,11 +14,11 @@ class HashLevel(list):
 
 class Inserter:
     finalizing = False
-    def __init__(self,graph=None):
+    def __init__(self,info,graph=None):
         self.levels = []
         self.graph = graph
-        self.hashSize = requester.hashSize
-        self.keysPerPiece = int(requester.maximumPieceSize / requester.hashSize)
+        self.keysPerPiece = info.keysPerPiece
+        self.maximumPieceSize = info.maximumPieceSize
     def addLevel(self,key,level):
         logging.debug('addlevel %s at %s -> %s',key,level,self.levels)
         assert(key)

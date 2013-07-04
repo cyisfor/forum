@@ -4,17 +4,20 @@ import deferred
 import logging
 
 import functools
+import copy
 
 ignore = set()
-deferreds = []
+deferreds = set()
+
+nada = [] # some distinct guard
 
 oldInit = deferred.Deferred.__init__
 def newInit(self,*a,**kw):
     self.debug = True
-    self.delayedResult = None
+    self.delayedResult = nada
     oldInit(self,*a,**kw)
     logging.debug('add %s',self)
-    deferreds.append(self)
+    deferreds.add(self)
 deferred.Deferred.__init__ = newInit
 
 def printFail(fail):
@@ -48,15 +51,29 @@ def newic(f):
 deferred.inlineCallbacks = newic
 
 def run():
+    global deferreds
     errors = []
     while len(deferreds):
-        d = deferreds.pop(0)
-        logging.debug('pop %s %s',d,d.called)
-        if not (d.called or d in ignore):
-            d.callback(d.delayedResult)
-            d.called = True
+        rem = set()
+        for d in copy.copy(deferreds):
+            if d.called:
+                rem.add(d)
+            else:
+                if d.delayedResult is not nada:
+                    d.callback(d.delayedResult)
+                    rem.add(d)
+        if len(rem)==0:
+            for d in deferreds:
+                d.errback(deferred.Failure(RuntimeError("Deferred got lost.")))
+                errors.append(d.result)
+            break
+        for d in rem:
             if isinstance(d.result,deferred.Failure):
                 errors.append(d.result)
+        deferreds = deferreds.difference(rem)
     for error in errors:
         error.printTraceback()
+
+def remove(d):
+    deferreds.remove(d)
 

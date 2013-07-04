@@ -1,4 +1,4 @@
-import inserter,extracter,requester,flatten,deferred
+import inserter,extracter,flatten,deferred,requester
 import keylib
 import logging
 import time
@@ -13,10 +13,11 @@ Must know how many pieces before in this hash level, as well as how many hashes 
 as well as what level this is...
 """
 
-class Extracter:
-    def __init__(self):
-        self.keysPerPiece = int(requester.maximumPieceSize / requester.hashSize)
-        self.hashSize = requester.hashSize
+class Extracter(requester.Requester):
+    def __init__(self,info):
+        self.hashSize = info.hashSize
+        self.maximumPieceSize = info.maximumPieceSize
+        self.keysPerPiece = info.keysPerPiece
     def keySplit(self,b):
         for i in range(int(len(b)/self.hashSize)):
             yield keylib.Key(b[i*self.hashSize:(i+1)*self.hashSize])
@@ -38,7 +39,7 @@ class Extracter:
                 for i,hasht in enumerate(hashes):
                     breadth = upperBreadth*self.keysPerPiece + i
                     logging.info('bread %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
-                    defs.append(requester.request(hasht,breadth,level)
+                    defs.append(self.requestPiece(hasht,breadth,level)
                             .addCallback(downOneLevel,breadth,level-1))
                 logging.info('%x subs',len(defs))
             except:
@@ -48,4 +49,4 @@ class Extracter:
             return deferred.DeferredList(defs)
         hasht = keylib.Key(uri[1:])
         logging.info('uri %s = %x:%s',uri,maxDepth,hasht)
-        return requester.request(hasht,0,maxDepth).addCallback(downOneLevel,0,maxDepth - 1)
+        return self.requestPiece(hasht,0,maxDepth).addCallback(downOneLevel,0,maxDepth - 1)
