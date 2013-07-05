@@ -6,7 +6,7 @@ from itertools import count
 
 class Inserter(inserter.Inserter):
     ctr = 0
-    def addPiece(self,piece,ctr,level):
+    def addPiece(self,piece,ctr,level=-1):
         ret = self.insertPiece(piece,ctr+1,level).addCallback(self.addLevel,0)
         return ret
     @inlineCallbacks
@@ -19,14 +19,14 @@ class Inserter(inserter.Inserter):
             if not amt: break
             ctr = next(counter)
             logging.info(1,'reading piece %x %x %x %s',ctr,ctr*self.maximumPieceSize,where,piece[:5])
-            yield self.addPiece(piece[:amt],ctr,-1)
+            yield self.addPiece(piece[:amt],ctr)
         ret = yield self.finish()
         logging.info(3,'finished with',ret,self.finish)
         returnValue(ret)
     @inlineCallbacks
     def addPieces(self,pieces):
         for i in range(int(len(pieces)/self.maximumPieceSize+1)):
-            yield self.addPiece(pieces[i*self.maximumPieceSize:(i+1)*self.maximumPieceSize],i,-1)
+            yield self.addPiece(pieces[i*self.maximumPieceSize:(i+1)*self.maximumPieceSize],i)
         ret = yield self.finish()
         returnValue(ret)
     def add(self,thing):
@@ -34,9 +34,13 @@ class Inserter(inserter.Inserter):
             return self.addFile(thing)
         return self.addPieces(thing)
 
-def extract(extracter,uri,gotPiece):
-    def leafHash(hasht,which):
-        return extracter.requestPiece(hasht,which,0).addCallback(gotPiece,which)
+def extract(extracter,uri,gotPiece=None):
+    if gotPiece:
+        def leafHash(hasht,which):
+            return extracter.requestPiece(hasht,which,0).addCallback(gotPiece,which)
+    else:
+        def leafHash(hasht,which):
+            return extracter.requestPiece(hasht,which,0)
     return extracter.extract(uri,leafHash)
 
 def extractToFile(extracter,dest,uri):

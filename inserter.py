@@ -15,6 +15,7 @@ class HashLevel(list):
 class Inserter:
     finalizing = False
     def __init__(self,info,graph=None):
+        self.info = info
         self.levels = []
         self.graph = graph
         self.keysPerPiece = info.keysPerPiece
@@ -35,7 +36,6 @@ class Inserter:
         logging.debug(0,'carry %s',self.levels)
         platform = self.levels[level]
         if ( self.finalizing and (len(platform) > 1 or (len(platform)==1 and level + 1 < len(self.levels)) )) or ( len(platform) >= self.keysPerPiece ):
-            logging.debug(1,'carrying to %x',level+1)
             ctr = platform.totalNum
             def gotkey(newkey):
                 if self.graph:
@@ -55,7 +55,7 @@ class Inserter:
             logging.debug(0,'nacarry %x %x',level,len(platform))
         return deferred.succeed(platform)
     def finish(self):
-        logging.debug(3,'finishing plain')
+        logging.debug(4,'finishing plain')
         self.finalizing = True
         def carriedUp(bottom,level):
             if level + 1 < len(self.levels):

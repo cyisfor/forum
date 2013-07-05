@@ -6,7 +6,7 @@ import generic,extracter,info
 import graph
 import keylib
 
-import shelve
+import os
 
 from hashlib import sha512
 
@@ -18,8 +18,8 @@ def makeHash(b):
     derp.update(b)
     return keylib.Key(derp.digest())
 
-
-shelf = shelve.open('pieces.shelve')
+try: os.mkdir('pieces')
+except OSError: pass
 
 info = info.Info(0xffff,len(makeHash(b'')))
 
@@ -27,8 +27,8 @@ class Extracter(extracter.Extracter):
     def __init__(self):
         super().__init__(info)
     def requestPiece(self,hasht,ctr,depth):
-        piece = shelf[str(hasht)]
-        logging.debug(1,'piece %x %s %x',ctr,hasht,len(piece))
+        with open('pieces/{}'.format(str(hasht).replace('/','_')),'rb') as inp:
+            piece = inp.read()
         return deferred.succeed(piece)
 
 class Inserter(generic.Inserter):
@@ -36,8 +36,9 @@ class Inserter(generic.Inserter):
         super().__init__(info,graphderp)
     def insertPiece(self,piece,ctr,level):
         hasht = makeHash(piece)
-        shelf.setdefault(str(hasht),piece)
-        logging.debug(1,'inserted %s',hasht)
+        logging.info(4,'inserting',hasht)
+        with open('pieces/{}'.format(str(hasht).replace('/','_')),'wb') as out:
+            out.write(piece)
         return deferred.succeed(hasht)
 
 def example():
@@ -45,9 +46,9 @@ def example():
         logging.info(2,'got uri '+str(uri))
         return generic.extractToFile(extracter,'test2.dat',uri)
     def gotKey(key,ins):
-        logging.log(3,'got key',key)
+        info.currentIdentity = key
+        logging.log(4,'got key',key,keylib.decode(key[1:]))
         ins,ext = crypto.context(ins,Extracter())
-        logging.log(5,ins.add)
         inp = open('test.dat','rb')
         def close(derp):
             inp.close()

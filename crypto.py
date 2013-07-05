@@ -83,7 +83,6 @@ def bytes_to_long(s):
 
 class Cryptothing(Wrapper):
     def __init__(self,sub,key=None,base=None):
-        self.plainAdd = sub.add
         super().__init__(sub)
         if key:
             self.key = key
@@ -93,6 +92,7 @@ class Cryptothing(Wrapper):
             self.base = base
         else:
             self.base = nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
+        logging.info(4,'Key is',self.key)
         self.box = nacl.secret.SecretBox(self.key)
     def getNonce(self,ctx,level):
         counter = ctx * 0x100 + level + 1
@@ -100,39 +100,49 @@ class Cryptothing(Wrapper):
 
 class Inserter(Cryptothing):
     def __init__(self,sub,ext):
+        self.plainAdd = sub.add
         super().__init__(sub)
         self.ext = ext
     def add(self,subAdd,uri,recipients):
+        logging.log(5,'crypto add')
         self.recipients = recipients
         return subAdd(uri)
-    def addPiece(self,subAddPiece,piece,ctx,level):
+    def insertPiece(self,subInsertPiece,piece,ctx,level):
         # make sure ctx,level != 0,0 because that's what ctr the key piece uses.
-        logging.log(3,'encrypt nonce',ctx+1,level)
+        logging.log(4,'encrypt nonce',ctx+1,level)
         try:
            nonce = self.getNonce(ctx+1,level)
         except AttributeError:
             print(self)
             print(dir(self))
             raise
-        return subAddPiece(self.box.encrypt(piece,nonce),ctx,level)
+        return subInsertPiece(self.box.encrypt(piece,nonce),ctx,level)
     def finish(self,subFinish):
-        logging.info(3,'finishing')
+        logging.info(4,'finishing')
         uri = subFinish()
         def makeWrapper(uri):
             nonce = self.base
             # fine to reuse the nonce because each key is different
             chash = self.box.encrypt(uri,nonce)
             data = nonce + chash
-            slot = byte(0) * 8 + instracter.key
+            slot = bytes(8) + self.key
             logging.log(3,'nonce is',nonce)
-            guys = enumerate(recipients)
-            def gotKey(data,i):
-                logging.log(3,'encrypting to ',recipient)
+            guys = enumerate(self.recipients)
+            def gotKey(data,i,recipient):
+                logging.log(5,'encrypting to ',recipient,len(data))
                 key = nacl.public.PublicKey(data)
-                data += key.encrypt(slot,nonce)
+                with closing(shelve.open('privateKeys.shelve')) as privateKeys:
+                    box = nacl.public.Box(
+                            nacl.public.PrivateKey(privateKeys[str(self.info.currentIdentity)]),
+                            key)
+                try:
+                    data += box.encrypt(slot,nonce)
+                except:
+                    logging.info(5,slot,nonce,'arg')
+                    raise
                 try:
                     i,recipient = next(guys)
-                    return extracter.requestPiece(recipient).addCallback(gotKey,i)
+                    return memory.extract(self.ext,recipient).addCallback(gotKey,i,recipient)
                 except StopIteration:
                     # so how many recipients isn't certain:
                     top = (int(i>>3)+1)<<3
@@ -142,26 +152,32 @@ class Inserter(Cryptothing):
             def completePiece(piece):
                 return self.plainAdd(piece)
             i,recipient = next(guys)
-            return extracter.requestPiece(recipient).addCallback(gotKey,i).addCallback(completePiece)
+            return memory.extract(self.ext,recipient).addCallback(gotKey,i,recipient).addCallback(completePiece)
         return uri.addCallback(makeWrapper)
 
 
-class Extracter(Cryptothing):
+class RawExtracter(Cryptothing):
     def requestPiece(self,subRequestPiece,hasht,ctx,level):
         piece = subRequestPiece(hasht,ctx,level)
         nonce = self.getNonce(ctx+1,level)
-        logging.log(3,'encrypt nonce',ctx+1,level)
+        logging.log(4,'decrypt nonce',ctx+1,level)
         return self.box.decrypt(piece,nonce)
 
-slotSize = nacl.secret.SecretBox.KEY_SIZE + 8;
-def request(nextStep):
+slotSize = nacl.secret.SecretBox.KEY_SIZE + 8
+def slotSplit(b):
+    for i in range(int(len(b)/slotSize)):
+        yield b[i*slotSize,(i+1)*slotSize]
+
+class Extracter:
+    def __init__(self,nextStep):
+        self.nextStep = nextStep
     @inlineCallbacks
-    def doit(uri,handler):
-        extracter = nextStep
-        data = yield memory.extract(extracter,uri)
+    def extract(self,uri,handler):
+        data = yield memory.extract(self.nextStep,uri)
         nonce,chash,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
                 nacl.secret.SecretBox.KEY_SIZE)
+        slots = tuple(slotSplit(slots))
         with closing(shelve.open('privateKeys.shelve')) as privateKeys:
             for priv in privateKeys.values():
                 priv = nacl.public.PrivateKey(priv)
@@ -169,24 +185,19 @@ def request(nextStep):
                 box = nacl.public.Box(priv,pub)
                 try: plain = box.decrypt(slots,nonce)
                 except nacl.exceptions.CryptoError: continue
-                slots = tuple(slotSplit(slots))
-                for slot in slotSplit(slots):
+                for slot in slots:
                     if bytes_to_long(slot[0:8])==0:
                         key = slot[8:]
                         box = nacl.secret.SecretBox(key)
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
-                        nextStepw = Extracter(nextStep,key,nonce)
+                        nextStepw = RawExtracter(self.nextStep,key,nonce)
                         ret = yield nextStepw.extract(uri,handler)
                         returnValue(ret)
         raise RuntimeError("You don't have a key for this file.")
-    class Derp:
-        def extract(self,uri,handler):
-            return doit(uri,handler)
-    return Derp()
 
 def context(subins,subreq):
-    ins,ext = Inserter(subins,subreq),request(subreq)
+    ins,ext = Inserter(subins,subreq),Extracter(subreq)
     ins.wrap()
     return ins,ext
 
@@ -212,13 +223,14 @@ def makeKey(inserter,isSigning=False):
         cls = nacl.public.PrivateKey
         dest = 'privateKeys.shelve'
     priv = cls.generate()
-    def gotRoot(root):
+    def gotRoot(uri):
         with closing(shelve.open(dest)) as privateKeys:
-            privateKeys[str(root)] = priv.encode()
-        return root
+            privateKeys[str(uri)] = priv.encode()
+        logging.info(4,'Made key',uri)
+        return uri
     return inserter.add(priv.public_key.encode()).addCallback(gotRoot)
 
-def getPrivate(root,isSigning=False):
+def getPrivate(uri,isSigning=False):
     if isSigning:
         cls = nacl.signing.SigningKey
         source = 'signingKeys.shelve'
@@ -226,7 +238,7 @@ def getPrivate(root,isSigning=False):
         cls = nacl.public.PrivateKey
         source = 'privateKeys.shelve'
     with closing(shelve.open(source)) as privateKeys:
-        return cls(privateKeys[str(root)])
+        return cls(privateKeys[str(uri)])
 
 def sign(self,inserter,pub,uri):
     priv = getPrivate(pub,isSigning=True)
@@ -243,4 +255,3 @@ def checkSignature(extracter,uri):
         pub,uri,signature = splitOffsets(data,dispatcher.uriSize,dispatcher.uriSize)
         return extracter.extract(pub).addCallback(doVerify,uri,signature)
     return extracter.extract(uri).addCallback(doGetKey)
-

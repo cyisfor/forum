@@ -1,5 +1,7 @@
 # I r so sly
 
+currentStage = 4
+
 import sys,os
 
 from pprint import pprint
@@ -27,7 +29,6 @@ def skip(f):
     return f
 
 
-currentStage = 3
 
 def log(stage,msg,*a):
     if stage < currentStage: return
