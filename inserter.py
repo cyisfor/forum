@@ -69,6 +69,7 @@ class Inserter:
             except:
                 print(self.levels,platform)
                 raise
+            logging.debug(4,'finished plain',result)
             return deferred.succeed(keylib.Key(struct.pack('B',depth)+result))
         return self.maybeCarry(0).addCallback(carriedUp,0).addCallback(makeURI)
     def insertPiece(self,piece,ctr,level,handler):

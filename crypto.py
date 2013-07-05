@@ -19,7 +19,7 @@ except cffi.ffiplatform.VerificationError:
 
 import logging
 
-from wrapper import Wrapper
+import wrapper
 import memory
 from deferred import inlineCallbacks
 
@@ -81,7 +81,7 @@ def bytes_to_long(s):
         acc = (acc << 32) + unpack('>I', s[i:i+4])[0]
     return acc
 
-class Cryptothing(Wrapper):
+class Cryptothing(wrapper.Wrapper):
     def __init__(self,sub,key=None,base=None):
         super().__init__(sub)
         if key:
@@ -118,9 +118,10 @@ class Inserter(Cryptothing):
             raise
         return subInsertPiece(self.box.encrypt(piece,nonce),ctx,level)
     def finish(self,subFinish):
-        logging.info(4,'finishing')
+        logging.info(4,'finishing',subFinish)
         uri = subFinish()
         def makeWrapper(uri):
+            logging.log(6,"Making crypto wrapper for",uri)
             nonce = self.base
             # fine to reuse the nonce because each key is different
             chash = self.box.encrypt(uri,nonce)
@@ -129,7 +130,7 @@ class Inserter(Cryptothing):
             logging.log(3,'nonce is',nonce)
             guys = enumerate(self.recipients)
             def gotKey(data,i,recipient):
-                logging.log(5,'encrypting to ',recipient,len(data))
+                logging.log(5,'encrypting to',recipient,len(data))
                 key = nacl.public.PublicKey(data)
                 with closing(shelve.open('privateKeys.shelve')) as privateKeys:
                     box = nacl.public.Box(
@@ -166,7 +167,7 @@ class RawExtracter(Cryptothing):
 slotSize = nacl.secret.SecretBox.KEY_SIZE + 8
 def slotSplit(b):
     for i in range(int(len(b)/slotSize)):
-        yield b[i*slotSize,(i+1)*slotSize]
+        yield b[i*slotSize:(i+1)*slotSize]
 
 class Extracter:
     def __init__(self,nextStep):
@@ -177,7 +178,6 @@ class Extracter:
         nonce,chash,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
                 nacl.secret.SecretBox.KEY_SIZE)
-        slots = tuple(slotSplit(slots))
         with closing(shelve.open('privateKeys.shelve')) as privateKeys:
             for priv in privateKeys.values():
                 priv = nacl.public.PrivateKey(priv)
@@ -185,6 +185,7 @@ class Extracter:
                 box = nacl.public.Box(priv,pub)
                 try: plain = box.decrypt(slots,nonce)
                 except nacl.exceptions.CryptoError: continue
+                slots = tuple(slotSplit(slots))
                 for slot in slots:
                     if bytes_to_long(slot[0:8])==0:
                         key = slot[8:]

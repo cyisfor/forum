@@ -21,13 +21,14 @@ class Inserter(inserter.Inserter):
             logging.info(1,'reading piece %x %x %x %s',ctr,ctr*self.maximumPieceSize,where,piece[:5])
             yield self.addPiece(piece[:amt],ctr)
         ret = yield self.finish()
-        logging.info(3,'finished with',ret,self.finish)
+        logging.info(6,'finished with',ret,self.finish)
         returnValue(ret)
     @inlineCallbacks
     def addPieces(self,pieces):
         for i in range(int(len(pieces)/self.maximumPieceSize+1)):
             yield self.addPiece(pieces[i*self.maximumPieceSize:(i+1)*self.maximumPieceSize],i)
         ret = yield self.finish()
+        logging.info(6,'addpieces finish',ret,self.finish)
         returnValue(ret)
     def add(self,thing):
         if hasattr(thing,'readinto'):
@@ -41,6 +42,7 @@ def extract(extracter,uri,gotPiece=None):
     else:
         def leafHash(hasht,which):
             return extracter.requestPiece(hasht,which,0)
+    logging.info(6,"using extract",extracter.extract)
     return extracter.extract(uri,leafHash)
 
 def extractToFile(extracter,dest,uri):
