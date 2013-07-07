@@ -36,7 +36,7 @@ class Inserter(generic.Inserter):
         super().__init__(info,graphderp)
     def insertPiece(self,piece,ctr,level):
         hasht = makeHash(piece)
-        logging.info(4,'inserting',hasht)
+        logging.info(4,'inserting',hasht,keylib.decode(piece))
         with open('pieces/{}'.format(str(hasht).replace('/','_')),'wb') as out:
             out.write(piece)
         return deferred.succeed(hasht)

@@ -23,6 +23,7 @@ import wrapper
 import memory
 from deferred import inlineCallbacks
 import keylib
+from bytelib import bytes_to_long,long_to_bytes,splitOffsets
 
 import nacl.secret
 import nacl.public
@@ -34,54 +35,6 @@ import shelve
 
 # copied from pycrypto
 import struct
-
-def long_to_bytes(n, blocksize=0):
-    """long_to_bytes(n:long, blocksize:int) : string
-    Convert a long integer to a byte string.
-
-    If optional blocksize is given and greater than zero, pad the front of the
-    byte string with binary zeros so that the length is a multiple of
-    blocksize.
-    """
-    # after much testing, this algorithm was deemed to be the fastest
-    s = b''
-    n = int(n)
-    pack = struct.pack
-    while n > 0:
-        s = pack('>I', n & 0xffffffff) + s
-        n = n >> 32
-    # strip off leading zeros
-    for i in range(len(s)):
-        if s[i] != b'\000'[0]:
-            break
-    else:
-        # only happens when n == 0
-        s = b'\000'
-        i = 0
-    s = s[i:]
-    # add back some pad bytes.  this could be done more efficiently w.r.t. the
-    # de-padding being done above, but sigh...
-    if blocksize > 0 and len(s) % blocksize:
-        s = (blocksize - len(s) % blocksize) * b'\000' + s
-    return s
-
-def bytes_to_long(s):
-    """bytes_to_long(string) : long
-    Convert a byte string to a long integer.
-
-    This is (essentially) the inverse of long_to_bytes().
-    """
-    acc = 0
-    unpack = struct.unpack
-    length = len(s)
-    if length % 4:
-        extra = (4 - length % 4)
-        s = b('\000') * extra + s
-        length = length + extra
-    for i in range(0, length, 4):
-        acc = (acc << 32) + unpack('>I', s[i:i+4])[0]
-    return acc
-
 class Cryptothing(wrapper.Wrapper):
     def __init__(self,sub,key=None,base=None):
         super().__init__(sub)
@@ -90,14 +43,14 @@ class Cryptothing(wrapper.Wrapper):
         else:
             self.key = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
         if base:
-            self.base = base
+            self.base = bytes_to_long(base)
         else:
-            self.base = nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
+            self.base = bytes_to_long(nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE))
         logging.info(4,'Skey is',self.key)
         self.box = nacl.secret.SecretBox(self.key)
     def getNonce(self,ctx,level):
-        counter = ctx * 0x100 + level + 1
-        return long_to_bytes(bytes_to_long(self.base) ^ counter)
+        counter = ctx * 0x1000 + level + 1
+        return long_to_bytes(self.base ^ counter)
 
 class Inserter(Cryptothing):
     def __init__(self,sub,ext):
@@ -123,13 +76,16 @@ class Inserter(Cryptothing):
         uri = subFinish()
         def makeWrapper(uri):
             logging.log(6,"Making crypto wrapper for",uri)
-            nonce = self.base
+            nonce = self.getNonce(0,0)
             # fine to reuse the nonce because each key is different
             chash = self.box.encrypt(uri,nonce)
-            if not len(chash)==len(uri) + 0x28:
+            if not len(chash)==1 + self.hashSize + nacl.secret.SecretBox.NONCE_SIZE + 0x10:
                 raise RuntimeError('Oh no',hex(len(chash)),hex(len(uri)),hex(len(chash)-len(uri)))
-            data = nonce + chash + self.info.currentIdentity
-            logging.log(7,'Current identity is',keylib.decode(self.info.currentIdentity))
+            # not nonce + because nonce is already prepended by self.box.encrypt!
+            data = chash + self.info.currentIdentity
+            logging.log(9,'chash',keylib.decode(chash))
+            logging.log(9,'Current identity is',keylib.decode(self.info.currentIdentity))
+            logging.log(9,'encoded',keylib.decode(data))
             slot = bytes(8) + self.key
             logging.log(3,'nonce is',nonce)
             for recipient in self.recipients:
@@ -139,12 +95,16 @@ class Inserter(Cryptothing):
                     box = nacl.public.Box(
                             nacl.public.PrivateKey(privateKeys[str(self.info.currentIdentity)]),
                             key)
-                try:
-                    data += box.encrypt(slot,nonce)
-                except:
-                    logging.info(5,slot,nonce,'arg')
-                    raise
-            return self.plainAdd(data)
+                slot = box.encrypt(slot,nonce)
+                assert len(slot) == slotSize
+                logging.info(10,'key',keylib.decode(recipient),'slot',keylib.decode(slot))
+                data += slot
+            ret = self.plainAdd(data)
+            def derp(uri):
+                logging.info(7,"wrapper uri =",uri)
+                return uri
+            ret.addCallback(derp)
+            return ret
         return uri.addCallback(makeWrapper)
 
 
@@ -155,7 +115,9 @@ class RawExtracter(Cryptothing):
         logging.log(4,'decrypt nonce',ctx+1,level)
         return self.box.decrypt(piece,nonce)
 
-slotSize = nacl.secret.SecretBox.KEY_SIZE + 8
+# determined experimentally
+slotSize = nacl.secret.SecretBox.KEY_SIZE + nacl.public.Box.NONCE_SIZE + 0x18
+print(hex(slotSize))
 def slotSplit(b):
     for i in range(int(len(b)/slotSize)):
         yield b[i*slotSize:(i+1)*slotSize]
@@ -163,32 +125,42 @@ def slotSplit(b):
 class Extracter:
     def __init__(self,nextStep):
         self.nextStep = nextStep
+        self.hashSize = nextStep.hashSize
     @inlineCallbacks
     def extract(self,uri,handler):
         data = yield memory.extract(self.nextStep,uri)
+        logging.info(9,'extracted',keylib.decode(data))
         nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
-                nacl.secret.SecretBox.KEY_SIZE + 0x28,
+                1 + self.hashSize + 0x10,
                 nacl.public.PublicKey.SIZE)
-        logging.info(7,'their key',keylib.decode(theirKey))
+        logging.info(9,'their key',keylib.decode(theirKey))
+        logging.info(9,keylib.decode(nonce),keylib.decode(chash))
         theirKey = nacl.public.PublicKey(theirKey)
+        slots = tuple(slotSplit(slots))
         with closing(shelve.open('privateKeys.shelve')) as privateKeys:
-            for priv in privateKeys.values():
-                priv = nacl.public.PrivateKey(priv)
-                logging.info(7,"trying pkey",keylib.decode(priv.public_key.encode()))
-                box = nacl.public.Box(priv,theirKey)
-                try: plain = box.decrypt(slots,nonce)
-                except nacl.exceptions.CryptoError as e:
-                    logging.info(7,'huh?',e)
-                    continue
-                slots = tuple(slotSplit(slots))
-                for slot in slots:
-                    if bytes_to_long(slot[0:8])==0:
-                        key = slot[8:]
+            for slot in slots:
+                derpnonce,slot = splitOffsets(slot,nacl.public.Box.NONCE_SIZE)
+                assert(derpnonce==nonce)
+                for privb in privateKeys.values():
+                    priv = nacl.public.PrivateKey(privb)
+                    logging.info(10,"pkey",keylib.decode(priv.public_key.encode()),'slot',keylib.decode(slot))
+                    box = nacl.public.Box(priv,theirKey)
+                    try: plain = box.decrypt(slot,nonce)
+                    except nacl.exceptions.CryptoError as e:
+                        logging.info(10,'huh?',e)
+                        continue
+                    logging.info(11,'Yay we found a key!')
+                    if bytes_to_long(plain[0:8])==0:
+                        key = plain[8:]
                         box = nacl.secret.SecretBox(key)
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
                         nextStepw = RawExtracter(self.nextStep,key,nonce)
+                        # XXX: how to change this from a wrapper extracter to a hash tree extractor??
+                        self.extract = nextStepw.extract
+                        # NOT nextStepw and NOT nextStep
+                        self.requestPiece = nextStepw.sub.requestPiece
                         ret = yield nextStepw.extract(uri,handler)
                         returnValue(ret)
         raise RuntimeError("You don't have a key for this file.")
@@ -204,13 +176,6 @@ def context(subins,subreq):
 # make new dispatcher coping dispatcher but extractor w/ Instracter + key wrapping old extracter
 # new dispatcher.extract on sub-pieces
 # continuation when done w/ old dispatcher (w/out crypto)
-
-def splitOffsets(b,*offsets):
-    lastPos = 0
-    for offset in offsets:
-        yield b[lastPos:lastPos+offset]
-        lastPos += offset
-    yield b[lastPos:]
 
 def makeKey(inserter,isSigning=False):
     if isSigning:

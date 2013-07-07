@@ -1,5 +1,5 @@
 import dependencies
-import sys
+import sys,os
 sys.path.append('deferred') # XXX: ugh
 dependencies.Import('deferred',dependencies.git('git@github.com:mikeal/deferred.git'))
 import deferred._defer
@@ -61,8 +61,10 @@ def run():
     global deferreds
     errors = []
     stage = count(0)
+    try: os.mkdir('deferredGraph')
+    except OSError: pass
     while len(deferreds):
-        with graph('deferreds/pass{}.dot'.format(next(stage))) as g:
+        with graph('deferredGraph/pass{}.dot'.format(next(stage))) as g:
             for d in deferreds:
                 graphtree(d,g)
         rem = set()

@@ -41,7 +41,10 @@ class Inserter(inserter.Inserter):
 def extract(extracter,uri,gotPiece=None):
     if gotPiece:
         def leafHash(hasht,which):
-            return extracter.requestPiece(hasht,which,0).addCallback(gotPiece,which)
+            try: return extracter.requestPiece(hasht,which,-1).addCallback(gotPiece,which)
+            except:
+                logging.info(11,'extracter is',extracter.requestPiece)
+                raise
     else:
         def leafHash(hasht,which):
             return extracter.requestPiece(hasht,which,0)
