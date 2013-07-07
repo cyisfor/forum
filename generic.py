@@ -25,12 +25,15 @@ class Inserter(inserter.Inserter):
         returnValue(ret)
     @inlineCallbacks
     def addPieces(self,pieces):
+        if len(pieces) < self.hashSize:
+            raise RuntimeError("Just embed the file itself!")
         for i in range(int(len(pieces)/self.maximumPieceSize+1)):
             yield self.addPiece(pieces[i*self.maximumPieceSize:(i+1)*self.maximumPieceSize],i)
         ret = yield self.finish()
         logging.info(6,'addpieces finish',ret,self.finish)
         returnValue(ret)
     def add(self,thing):
+        logging.info(7,'plain add',self.insertPiece)
         if hasattr(thing,'readinto'):
             return self.addFile(thing)
         return self.addPieces(thing)

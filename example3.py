@@ -45,18 +45,17 @@ def example():
     def gotURI(uri,extracter):
         logging.info(2,'got uri '+str(uri))
         return generic.extractToFile(extracter,'test2.dat',uri)
-    def gotKey(key,ins):
+    with graph("graph.dot") as graphderp:
+        ins = Inserter(graphderp)
+        key = crypto.makeKey(ins)
         info.currentIdentity = key
-        logging.log(4,'got key',key,keylib.decode(key[1:]))
+        logging.log(4,'got key',key,keylib.decode(key))
         ins,ext = crypto.context(ins,Extracter())
         inp = open('test.dat','rb')
         def close(derp):
             inp.close()
             return derp
         ins.add(inp,(key,)).addCallbacks(close,close).addCallback(gotURI,ext)
-    with graph("graph.dot") as graphderp:
-        ins = Inserter(graphderp)
-        crypto.makeKey(ins).addCallback(gotKey,ins)
         deferreds.run()
 
 example()

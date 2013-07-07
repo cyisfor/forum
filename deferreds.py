@@ -4,6 +4,9 @@ sys.path.append('deferred') # XXX: ugh
 dependencies.Import('deferred',dependencies.git('git@github.com:mikeal/deferred.git'))
 import deferred._defer
 import deferred
+from deferred.graph import graphtree,graph
+
+from itertools import count
 
 import logging
 
@@ -57,7 +60,11 @@ deferred.inlineCallbacks = newic
 def run():
     global deferreds
     errors = []
+    stage = count(0)
     while len(deferreds):
+        with graph('deferreds/pass{}.dot'.format(next(stage))) as g:
+            for d in deferreds:
+                graphtree(d,g)
         rem = set()
         for d in copy.copy(deferreds):
             if d.called:

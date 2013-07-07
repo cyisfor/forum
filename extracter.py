@@ -33,7 +33,8 @@ class Extracter(requester.Requester):
                 breadth = upperBreadth*self.keysPerPiece + i
                 logging.info(2,'breadth %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
                 if level == 1:
-                    defs.append(handler(hasht,breadth))
+                    d = handler(hasht,breadth)
+                    if d: defs.append(d)
                 else:
                     defs.append(self.requestPiece(hasht,breadth,level)
                             .addCallback(downOneLevel,breadth,level-1))

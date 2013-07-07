@@ -22,6 +22,7 @@ import logging
 import wrapper
 import memory
 from deferred import inlineCallbacks
+import keylib
 
 import nacl.secret
 import nacl.public
@@ -92,7 +93,7 @@ class Cryptothing(wrapper.Wrapper):
             self.base = base
         else:
             self.base = nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
-        logging.info(4,'Key is',self.key)
+        logging.info(4,'Skey is',self.key)
         self.box = nacl.secret.SecretBox(self.key)
     def getNonce(self,ctx,level):
         counter = ctx * 0x100 + level + 1
@@ -109,7 +110,7 @@ class Inserter(Cryptothing):
         return subAdd(uri)
     def insertPiece(self,subInsertPiece,piece,ctx,level):
         # make sure ctx,level != 0,0 because that's what ctr the key piece uses.
-        logging.log(4,'encrypt nonce',ctx+1,level)
+        logging.log(7,'encrypt insert',ctx+1,level)
         try:
            nonce = self.getNonce(ctx+1,level)
         except AttributeError:
@@ -125,13 +126,15 @@ class Inserter(Cryptothing):
             nonce = self.base
             # fine to reuse the nonce because each key is different
             chash = self.box.encrypt(uri,nonce)
-            data = nonce + chash
+            if not len(chash)==len(uri) + 0x28:
+                raise RuntimeError('Oh no',hex(len(chash)),hex(len(uri)),hex(len(chash)-len(uri)))
+            data = nonce + chash + self.info.currentIdentity
+            logging.log(7,'Current identity is',keylib.decode(self.info.currentIdentity))
             slot = bytes(8) + self.key
             logging.log(3,'nonce is',nonce)
-            guys = enumerate(self.recipients)
-            def gotKey(data,i,recipient):
-                logging.log(5,'encrypting to',recipient,len(data))
-                key = nacl.public.PublicKey(data)
+            for recipient in self.recipients:
+                key = nacl.public.PublicKey(recipient)
+                logging.log(7,'encrypting to',keylib.decode(recipient),len(data))
                 with closing(shelve.open('privateKeys.shelve')) as privateKeys:
                     box = nacl.public.Box(
                             nacl.public.PrivateKey(privateKeys[str(self.info.currentIdentity)]),
@@ -141,19 +144,7 @@ class Inserter(Cryptothing):
                 except:
                     logging.info(5,slot,nonce,'arg')
                     raise
-                try:
-                    i,recipient = next(guys)
-                    return memory.extract(self.ext,recipient).addCallback(gotKey,i,recipient)
-                except StopIteration:
-                    # so how many recipients isn't certain:
-                    top = (int(i>>3)+1)<<3
-                    if top != i:
-                        data += nacl.utils.random(len(slot)*(top-i))
-                    return data
-            def completePiece(piece):
-                return self.plainAdd(piece)
-            i,recipient = next(guys)
-            return memory.extract(self.ext,recipient).addCallback(gotKey,i,recipient).addCallback(completePiece)
+            return self.plainAdd(data)
         return uri.addCallback(makeWrapper)
 
 
@@ -175,16 +166,21 @@ class Extracter:
     @inlineCallbacks
     def extract(self,uri,handler):
         data = yield memory.extract(self.nextStep,uri)
-        nonce,chash,slots = splitOffsets(data,
+        nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
-                nacl.secret.SecretBox.KEY_SIZE)
+                nacl.secret.SecretBox.KEY_SIZE + 0x28,
+                nacl.public.PublicKey.SIZE)
+        logging.info(7,'their key',keylib.decode(theirKey))
+        theirKey = nacl.public.PublicKey(theirKey)
         with closing(shelve.open('privateKeys.shelve')) as privateKeys:
             for priv in privateKeys.values():
                 priv = nacl.public.PrivateKey(priv)
-                pub = priv.public_key
-                box = nacl.public.Box(priv,pub)
+                logging.info(7,"trying pkey",keylib.decode(priv.public_key.encode()))
+                box = nacl.public.Box(priv,theirKey)
                 try: plain = box.decrypt(slots,nonce)
-                except nacl.exceptions.CryptoError: continue
+                except nacl.exceptions.CryptoError as e:
+                    logging.info(7,'huh?',e)
+                    continue
                 slots = tuple(slotSplit(slots))
                 for slot in slots:
                     if bytes_to_long(slot[0:8])==0:
@@ -224,14 +220,13 @@ def makeKey(inserter,isSigning=False):
         cls = nacl.public.PrivateKey
         dest = 'privateKeys.shelve'
     priv = cls.generate()
-    def gotRoot(uri):
-        with closing(shelve.open(dest)) as privateKeys:
-            privateKeys[str(uri)] = priv.encode()
-        logging.info(4,'Made key',uri)
-        return uri
-    return inserter.add(priv.public_key.encode()).addCallback(gotRoot)
+    keyid = priv.public_key.encode()
+    with closing(shelve.open(dest)) as privateKeys:
+        privateKeys[str(keyid)] = priv.encode()
+    logging.info(7,'Made pkey',keylib.decode(keyid))
+    return keyid
 
-def getPrivate(uri,isSigning=False):
+def getPrivate(keyid,isSigning=False):
     if isSigning:
         cls = nacl.signing.SigningKey
         source = 'signingKeys.shelve'
@@ -239,7 +234,7 @@ def getPrivate(uri,isSigning=False):
         cls = nacl.public.PrivateKey
         source = 'privateKeys.shelve'
     with closing(shelve.open(source)) as privateKeys:
-        return cls(privateKeys[str(uri)])
+        return cls(privateKeys[str(keyid)])
 
 def sign(self,inserter,pub,uri):
     priv = getPrivate(pub,isSigning=True)
@@ -248,11 +243,9 @@ def sign(self,inserter,pub,uri):
     return inserter.add(data)
 
 def checkSignature(extracter,uri):
-    def doVerify(data,uri,signature):
-        verifyKey = nacl.signing.Verifykey(data)
+    def doVerify(data):
+        pub,uri,signature = splitOffsets(data,dispatcher.uriSize,dispatcher.uriSize)
+        verifyKey = nacl.signing.Verifykey(pub)
         verifyKey.verify(uri,signature)
         return uri
-    def doGetKey(data):
-        pub,uri,signature = splitOffsets(data,dispatcher.uriSize,dispatcher.uriSize)
-        return extracter.extract(pub).addCallback(doVerify,uri,signature)
-    return extracter.extract(uri).addCallback(doGetKey)
+    return extracter.extract(uri).addCallback(doVerify)

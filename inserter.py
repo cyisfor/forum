@@ -20,6 +20,7 @@ class Inserter:
         self.graph = graph
         self.keysPerPiece = info.keysPerPiece
         self.maximumPieceSize = info.maximumPieceSize
+        self.hashSize = info.hashSize
     def addLevel(self,key,level):
         logging.debug(0,'addlevel %s at %s -> %s',key,level,self.levels)
         assert(key)
@@ -69,7 +70,8 @@ class Inserter:
             except:
                 print(self.levels,platform)
                 raise
-            logging.debug(4,'finished plain',result)
+            logging.debug(4,'finished plain',result,depth)
+            self.levels = []
             return deferred.succeed(keylib.Key(struct.pack('B',depth)+result))
         return self.maybeCarry(0).addCallback(carriedUp,0).addCallback(makeURI)
     def insertPiece(self,piece,ctr,level,handler):
