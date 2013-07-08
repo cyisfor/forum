@@ -27,6 +27,11 @@ class Extracter(extracter.Extracter):
     def __init__(self):
         super().__init__(info)
     def requestPiece(self,hasht,ctr,depth):
+        logging.info(12,'requesting',hasht,ctr,depth)
+        try: raise ZeroDivisionError
+        except ZeroDivisionError:
+            import traceback
+            traceback.print_stack(limit=3)
         with open('pieces/{}'.format(str(hasht).replace('/','_')),'rb') as inp:
             piece = inp.read()
         return deferred.succeed(piece)
@@ -36,7 +41,7 @@ class Inserter(generic.Inserter):
         super().__init__(info,graphderp)
     def insertPiece(self,piece,ctr,level):
         hasht = makeHash(piece)
-        logging.info(4,'inserting',hasht,keylib.decode(piece))
+        logging.info(12,'inserting',hasht,ctr,level)
         with open('pieces/{}'.format(str(hasht).replace('/','_')),'wb') as out:
             out.write(piece)
         return deferred.succeed(hasht)

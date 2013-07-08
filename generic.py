@@ -41,6 +41,7 @@ class Inserter(inserter.Inserter):
 def extract(extracter,uri,gotPiece=None):
     if gotPiece:
         def leafHash(hasht,which):
+            logging.info(12,'extracter.requpi',extracter,extracter.requestPiece)
             try: return extracter.requestPiece(hasht,which,-1).addCallback(gotPiece,which)
             except:
                 logging.info(11,'extracter is',extracter.requestPiece)

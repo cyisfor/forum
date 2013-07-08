@@ -21,7 +21,7 @@ import logging
 
 import wrapper
 import memory
-from deferred import inlineCallbacks
+from deferred import inlineCallbacks,returnValue
 import keylib
 from bytelib import bytes_to_long,long_to_bytes,splitOffsets
 
@@ -42,15 +42,11 @@ class Cryptothing(wrapper.Wrapper):
             self.key = key
         else:
             self.key = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
-        if base:
-            self.base = bytes_to_long(base)
-        else:
-            self.base = bytes_to_long(nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE))
-        logging.info(4,'Skey is',self.key)
         self.box = nacl.secret.SecretBox(self.key)
-    def getNonce(self,ctx,level):
-        counter = ctx * 0x1000 + level + 1
-        return long_to_bytes(self.base ^ counter)
+        logging.info(4,'Skey is',self.key)
+    def getNonce(self):
+        return b'Q'*nacl.secret.SecretBox.NONCE_SIZE
+        #return nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
 
 class Inserter(Cryptothing):
     def __init__(self,sub,ext):
@@ -65,7 +61,7 @@ class Inserter(Cryptothing):
         # make sure ctx,level != 0,0 because that's what ctr the key piece uses.
         logging.log(7,'encrypt insert',ctx+1,level)
         try:
-           nonce = self.getNonce(ctx+1,level)
+           nonce = self.getNonce()
         except AttributeError:
             print(self)
             print(dir(self))
@@ -76,7 +72,7 @@ class Inserter(Cryptothing):
         uri = subFinish()
         def makeWrapper(uri):
             logging.log(6,"Making crypto wrapper for",uri)
-            nonce = self.getNonce(0,0)
+            nonce = self.getNonce()
             # fine to reuse the nonce because each key is different
             chash = self.box.encrypt(uri,nonce)
             if not len(chash)==1 + self.hashSize + nacl.secret.SecretBox.NONCE_SIZE + 0x10:
@@ -109,11 +105,12 @@ class Inserter(Cryptothing):
 
 
 class RawExtracter(Cryptothing):
+    @inlineCallbacks
     def requestPiece(self,subRequestPiece,hasht,ctx,level):
-        piece = subRequestPiece(hasht,ctx,level)
-        nonce = self.getNonce(ctx+1,level)
-        logging.log(4,'decrypt nonce',ctx+1,level)
-        return self.box.decrypt(piece,nonce)
+        piece = yield subRequestPiece(hasht,ctx,level)
+        nonce,piece = splitOffsets(piece,nacl.secret.SecretBox.NONCE_SIZE)
+        logging.info(12,'found nonce',nonce)
+        returnValue(self.box.decrypt(piece,nonce))
 
 # determined experimentally
 slotSize = nacl.secret.SecretBox.KEY_SIZE + nacl.public.Box.NONCE_SIZE + 0x18
@@ -126,10 +123,11 @@ class Extracter:
     def __init__(self,nextStep):
         self.nextStep = nextStep
         self.hashSize = nextStep.hashSize
+        self.maximumPieceSize = nextStep.maximumPieceSize
     @inlineCallbacks
     def extract(self,uri,handler):
         data = yield memory.extract(self.nextStep,uri)
-        logging.info(9,'extracted',keylib.decode(data))
+        logging.info(12,'YAY got crypto wrapper')
         nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
                 1 + self.hashSize + 0x10,
@@ -157,9 +155,11 @@ class Extracter:
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
                         nextStepw = RawExtracter(self.nextStep,key,nonce)
+                        nextStepw.wrap()
                         # XXX: how to change this from a wrapper extracter to a hash tree extractor??
                         self.extract = nextStepw.extract
-                        # NOT nextStepw and NOT nextStep
+                        # NOT nextStepw and NOT nextStep, nextStepw.sub
+                        logging.info(12,'Making raw extracter',nextStepw,nextStepw.sub.requestPiece)
                         self.requestPiece = nextStepw.sub.requestPiece
                         ret = yield nextStepw.extract(uri,handler)
                         returnValue(ret)
