@@ -14,8 +14,6 @@ from hashlib import sha512
 import logging
 import os
 
-logging.basicConfig(level=logging.INFO,
-        format='%(module)s:%(lineno)s %(message)s %(funcName)s')
 def makeHash(b):
     derp = sha512()
     derp.update(b)
@@ -33,7 +31,7 @@ class Extracter(extracter.Extracter):
     def requestPiece(self,hasht,ctr,depth):
         with open('pieces/{}'.format(str(hasht).replace('/','_')),'rb') as inp:
             piece = inp.read()
-        logging.debug('piece %x %s %x',ctr,hasht,len(piece))
+        logging.debug(13,'piece %x %s %x',ctr,hasht,len(piece))
         return deferred.succeed(piece)
 
 class Inserter(generic.Inserter):
@@ -43,12 +41,12 @@ class Inserter(generic.Inserter):
         hasht = makeHash(piece)
         with open('pieces/{}'.format(str(hasht).replace('/','_')),'wb') as out:
             out.write(piece)
-        logging.debug('inserted %s',hasht)
+        logging.debug(13,'inserted %s',hasht)
         return deferred.succeed(hasht)
 
 def example():
     def gotURI(uri,extracter):
-        logging.info('got uri '+str(uri))
+        logging.info(13,'got uri '+str(uri))
         return generic.extractToFile(extracter,'test2.dat',uri)
     with graph("graph.dot") as graphderp:
         ins = Inserter(graphderp)

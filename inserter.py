@@ -1,8 +1,6 @@
 import keylib
 
 import deferred
-deferred.setDebugging(True)
-
 import logging
 import struct
 import gc
