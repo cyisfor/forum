@@ -24,20 +24,20 @@ class Extracter(requester.Requester):
         maxDepth=uri[0]
         hasht = keylib.Key(uri[1:])
         if maxDepth == 1:
-            return self.requestPiece(hasht,0,-1).addCallback(handler,0)
+            return self.requestPiece(hasht,0,-1).addCallback(handler,1)
         # XXX: need the exact offset in pieces from the left
         def downOneLevel(piece,upperBreadth,level):
             hashes = list(self.keySplit(piece))
             defs = []
             for i,hasht in enumerate(hashes):
                 breadth = upperBreadth*self.keysPerPiece + i
-                logging.info(2,'breadth %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
+                logging.info(13,'breadth %s %x * %x + %x -> %x',str(hasht)[:4],upperBreadth,self.keysPerPiece,i,breadth)
                 if level == 1:
                     d = handler(hasht,breadth)
                     if d: defs.append(d)
                 else:
-                    defs.append(self.requestPiece(hasht,breadth,level)
+                    defs.append(self.requestPiece(hasht,breadth+1,level)
                             .addCallback(downOneLevel,breadth,level-1))
             return deferred.DeferredList(defs)
         logging.info(4,'uri %s = %x:%s',uri,maxDepth,hasht)
-        return self.requestPiece(hasht,0,maxDepth).addCallback(downOneLevel,0,maxDepth - 1)
+        return self.requestPiece(hasht,0,maxDepth - 1).addCallback(downOneLevel,0,maxDepth - 1)

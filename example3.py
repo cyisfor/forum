@@ -26,12 +26,8 @@ info = info.Info(0xffff,len(makeHash(b'')))
 class Extracter(extracter.Extracter):
     def __init__(self):
         super().__init__(info)
-    def requestPiece(self,hasht,ctr,depth):
-        logging.info(12,'requesting',hasht,ctr,depth)
-        try: raise ZeroDivisionError
-        except ZeroDivisionError:
-            import traceback
-            traceback.print_stack(limit=3)
+    def requestPiece(self,hasht,ctr,level):
+        logging.info(13,'requesting',hasht,ctr,level)
         with open('pieces/{}'.format(str(hasht).replace('/','_')),'rb') as inp:
             piece = inp.read()
         return deferred.succeed(piece)

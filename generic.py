@@ -7,7 +7,7 @@ from itertools import count
 class Inserter(inserter.Inserter):
     ctr = 0
     def addPiece(self,piece,ctr,level=-1):
-        ret = self.insertPiece(piece,ctr+1,level).addCallback(self.addLevel,0)
+        ret = self.insertPiece(piece,ctr,level).addCallback(self.addLevel,0)
         return ret
     @inlineCallbacks
     def addFile(self,inp):
@@ -18,7 +18,7 @@ class Inserter(inserter.Inserter):
             amt = inp.readinto(piece)
             if not amt: break
             ctr = next(counter)
-            logging.info(1,'reading piece %x %x %x %s',ctr,ctr*self.maximumPieceSize,where,piece[:5])
+            logging.info(13,'reading piece %x max = %x %x %x %s',ctr,self.maximumPieceSize,ctr*self.maximumPieceSize,where,piece[:5])
             yield self.addPiece(piece[:amt],ctr)
         ret = yield self.finish()
         logging.info(6,'finished with',ret,self.finish)
@@ -55,7 +55,7 @@ def extract(extracter,uri,gotPiece=None):
 def extractToFile(extracter,dest,uri):
     out = open(dest,'wb')
     def writer(piece,which):
-        logging.info(1,'writing piece %x %x %x %s',which,which*extracter.maximumPieceSize,len(piece),piece[:5])
+        logging.info(13,'writing piece %x max = %x %x %x %s',which,extracter.maximumPieceSize,which*extracter.maximumPieceSize,len(piece),piece[:5])
         out.seek(which*extracter.maximumPieceSize)
         out.write(piece)
         out.flush()

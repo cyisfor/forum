@@ -22,12 +22,12 @@ class Inserter:
         self.maximumPieceSize = info.maximumPieceSize
         self.hashSize = info.hashSize
     def addLevel(self,key,level):
-        logging.debug(7,'addlevel %s at %s -> %s',key,level,self.levels)
+        logging.debug(13,'addlevel %s at %s ',key,level)
         assert(key)
         if len(self.levels) == level:
             self.levels.append(HashLevel())
         def bottomderp(bottom):
-            logging.debug(7,'adding %s to %x (%x) %s',key,level,len(self.levels[level]),(bottom is self.levels[level]))
+            logging.debug(13,'level {} ++totalnum {}'.format(level,self.levels[level].totalNum))
             self.levels[level].append(key)
             self.levels[level].totalNum += 1
             return bottom
@@ -51,7 +51,11 @@ class Inserter:
                         return derp
                     return self.addLevel(newkey,level+1).addCallback(reFinalize)
                 return self.addLevel(newkey,level+1)
-            return self.insertPiece(keylib.join(platform),ctr,level+1).addCallback(gotkey)
+            if len(self.levels)>level+1:
+                upper = self.levels[level+1]
+            else:
+                upper = False
+            return self.insertPiece(keylib.join(platform),upper.totalNum if upper else 0,level+1).addCallback(gotkey)
         else:
             logging.debug(0,'nacarry %x %x',level,len(platform))
         return deferred.succeed(platform)

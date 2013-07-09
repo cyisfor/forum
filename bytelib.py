@@ -13,9 +13,11 @@ def long_to_bytes(n, blocksize=0):
     # after much testing, this algorithm was deemed to be the fastest
     s = b''
     n = int(n)
+    if n < 0:
+        n = abs(n)<<1+1
     pack = struct.pack
     while n > 0:
-        s = pack('I', n & 0xffffffff) + s
+        s = pack('>I', n & 0xffffffff) + s
         n = n >> 32
     # strip off leading zeros
     for i in range(len(s)):
@@ -28,7 +30,8 @@ def long_to_bytes(n, blocksize=0):
     s = s[i:]
     # add back some pad bytes.  this could be done more efficiently w.r.t. the
     # de-padding being done above, but sigh...
-    if blocksize > 0 and len(s) % blocksize:
+    # note < should be % but hax we only need padded up to a single block
+    if blocksize > 0 and len(s) < blocksize:
         s = (blocksize - len(s) % blocksize) * b'\000' + s
     return s
 
@@ -46,13 +49,12 @@ def bytes_to_long(s):
         s = b'\000' * extra + s
         length = length + extra
     for i in range(0, length, 4):
-        acc = (acc << 32) + unpack('I', s[i:i+4])[0]
+        acc = (acc << 32) + unpack('>I', s[i:i+4])[0]
     return acc
 
 def splitOffsets(b,*offsets):
     lastPos = 0
     for offset in offsets:
-        logging.info(8,'split',lastPos,offset,keylib.decode(b[lastPos:lastPos+offset]))
         yield b[lastPos:lastPos+offset]
         lastPos += offset
     yield b[lastPos:]

@@ -75,6 +75,7 @@ def run():
                 if d.delayedResult is not nada:
                     d.callback(d.delayedResult)
                     rem.add(d)
+                    if isinstance(d.result,deferred.Failure): raise d.result.value
         if len(rem)==0:
             for d in deferreds:
                 d.errback(deferred.Failure(RuntimeError("Deferred got lost.")))
