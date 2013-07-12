@@ -53,7 +53,7 @@ class Cryptothing(wrapper.Wrapper):
         self.box = nacl.secret.SecretBox(self.key)
         logging.info(4,'Skey is',self.key)
     def getNonce(self,ctx,level):
-        ret = self.base ^ (0x1000*ctx + level)
+        ret = self.base ^ (0x100*ctx + level)
         return long_to_bytes(ret,nacl.secret.SecretBox.NONCE_SIZE)[:nacl.secret.SecretBox.NONCE_SIZE]
         #return b'Q'*nacl.secret.SecretBox.NONCE_SIZE
         #return nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)

@@ -1,0 +1,3 @@
+Have an array of single pieces, each one representing a level of the tree. When a piece fills up with hashes, get its hash and carry upward just like addition. Thus you can build a hash tree with at most maxPieceSize*depth bytes. Depth being &lt;4 usually.
+
+Extraction can be done like subtraction similarly, but it's easier and better to just use lazy recursion (aka deferreds).

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+</head><body>
+<p>Boundaries between parts are how MIME attachments work, but usually scanning the part for the boundary is skipped, or just really expensive, so a part could divide unexpectedly into two broken parts. The answer is to discard boundaries entirely, and only have the message link to its parts. <a href="hashtree.html">Everything</a> can be <a href="piecedb.html">represented as pieces</a> so set max piece size to 0xffff. Then a 2 byte size header followed by the piece is something you can just append bytewise, to produce a message plus what it links to, like how email does attachments. No boundaries needed since the size of each piece is recorded, thus can use binary encoding, no escape characters.</p>
+<p><a href=".">So anyway back to email</a></p>
+</body></html>

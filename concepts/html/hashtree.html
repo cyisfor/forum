@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+</head><body>
+<p>Take a file break it up into pieces of a max size. Take the hash of each of those pieces and concatenate the hashes together to make a second smaller file. Break that up into pieces following this algorithm recursively and eventually you will be down to just one hash, the root hash. Combined with the depth of the tree that resulted and the root hash, you can verify the next level down, go through its hashes, then verify recursively until you have verified the entire file. Any whole branch can be verified, even if pieces are missing from other branches.</p>
+<p>You get files into the piecedb as a hash tree by way of a memory efficient form of <a href="addition.html">addition</a><p><a href=".">So anyway back to email</a></p>
+</body></html>

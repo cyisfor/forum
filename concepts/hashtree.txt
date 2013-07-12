@@ -1,0 +1,3 @@
+Take a file break it up into pieces of a max size. Take the hash of each of those pieces and concatenate the hashes together to make a second smaller file. Break that up into pieces following this algorithm recursively and eventually you will be down to just one hash, the root hash. Combined with the depth of the tree that resulted and the root hash, you can verify the next level down, go through its hashes, then verify recursively until you have verified the entire file. Any whole branch can be verified, even if pieces are missing from other branches.
+
+You get files into the piecedb as a hash tree by way of a memory efficient form of <a href="addition.html">addition</a>
