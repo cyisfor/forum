@@ -9,6 +9,10 @@ class Inserter(inserter.Inserter):
     def addPiece(self,piece,ctr,level=-1):
         ret = self.insertPiece(piece,ctr,level).addCallback(self.addLevel,0)
         return ret
+    def finish(self):
+        self.baseLevel = len(self.levels)
+        # Cannot repeat the same levels for a second file b/c encryption nonce
+        return super().finish()
     @inlineCallbacks
     def addFile(self,inp):
         piece = bytearray(self.maximumPieceSize)
@@ -48,7 +52,7 @@ def extract(extracter,uri,gotPiece=None):
                 raise
     else:
         def leafHash(hasht,which):
-            return extracter.requestPiece(hasht,which,0)
+            return extracter.requestPiece(hasht,which,-1)
     logging.info(6,"using extract",extracter.extract)
     return extracter.extract(uri,leafHash)
 

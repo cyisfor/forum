@@ -5,14 +5,10 @@ import copy
 
 nada = []
 
-noreents = set()
-def noreent(f):
-    noreents.add(f)
-    return f
-
 class Wrapper:
     def __init__(self,sub):
         self.sub = copy.copy(sub)
+        self.original = sub
     @logging.skip
     def wrap(self):
         attrs = {}
@@ -35,10 +31,7 @@ class Wrapper:
     def _makeWrapper(self,name,top,bottom):
         @wraps(top)
         def wrapper(*a,**kw):
-            try: return top(bottom,*a,**kw)
-            except TypeError:
-                logging.info(8,top,bottom,a,kw)
-                raise
+            return top(bottom,*a,**kw)
         return wrapper
     def __getattr__(self,name):
         v = getattr(self.sub,name)

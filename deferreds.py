@@ -28,8 +28,8 @@ def newInit(self,*a,**kw):
 deferred.Deferred.__init__ = newInit
 
 def printFail(fail):
+    if isinstance(fail.value,SystemExit): return fail
     fail.printTraceback()
-    raise SystemExit
     return fail
 
 oldSucceed = deferred.succeed
@@ -86,7 +86,8 @@ def run():
                 errors.append(d.result)
         deferreds = deferreds.difference(rem)
     for error in errors:
-        error.printTraceback()
+        if error:
+            error.printTraceback()
 
 def remove(d):
     deferreds.remove(d)

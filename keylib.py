@@ -6,19 +6,17 @@ def decode(b):
     return base64.b64encode(b)[:-2].decode()
     #return base64.b16encode(b).decode()
 
-class Wrapper:
-    def __init__(self,sub):
-        self.sub = sub
-    def __getattr__(self,name):
-        value = getattr(self.sub,name)
-        setattr(self,name,value)
-        return value
-
-class Key(bytes):
+class DerpKey(bytes):
+    type = 'CHK'
     def __str__(self):
         return decode(self)
     def __repr__(self):
-        return 'CHK('+decode(self)+')'
+        return self.type+'('+decode(self)+')'
+
+def Key(b,type='CHK'):
+    key = DerpKey(b)
+    key.type = type
+    return key
 
 def join(keys):
     return Key(b''.join(keys))
