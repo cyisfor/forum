@@ -95,12 +95,12 @@ the URIs within the top piece as necessary. You don't see the top URI because it
 class Inserter(Cryptothing):
     baseLevel = 0
     finished = False
-    def __init__(self,sub,ext):
+    def __init__(self,sub):
         self.plainAdd = sub.add
         super().__init__(sub)
         # crypto data may be up to 0x10 bigger than plaintext
         self.sub.maximumPieceSize -= 0x10
-        self.ext = ext
+        self.wrap()
     def add(self,subAdd,uri,recipients=None):
         if self.finished:
             raise RuntimeError("This inserter has already committed its utmost piece.")
@@ -120,16 +120,17 @@ class Inserter(Cryptothing):
         logging.info(4,'finishing',subFinish)
         def increaseBaseLevel(uri):
             self.baseLevel += uri[0] + 1 # + 1 for the -1 level leaf pieces
+            return uri
         return subFinish().addCallback(increaseBaseLevel)
     def commit(self,topURI):
         self.finished = True
         nonce = self.getNonce(0,0)
         # fine to reuse the nonce because each key is different
-        uri = struct.pack('B',self.baseLevel)+uri
+        uri = struct.pack('B',self.baseLevel)+topURI
         chash = self.box.encrypt(uri,nonce)
         #assert(chash[:len(nonce)]==nonce)
         # do NOT exNonce this... we need to save the base nonce, once
-        if not len(chash)==1 + self.hashSize + nacl.secret.SecretBox.NONCE_SIZE + 0x10:
+        if not len(chash)==2 + self.hashSize + nacl.secret.SecretBox.NONCE_SIZE + 0x10:
             raise RuntimeError('Oh no',hex(len(chash)),hex(len(uri)),hex(len(chash)-len(uri)))
         # not nonce + because nonce is already prepended by self.box.encrypt!
         data = chash + self.info.currentIdentity
@@ -181,7 +182,7 @@ class Extracter:
         self.hashSize = nextStep.hashSize
         self.maximumPieceSize = nextStep.maximumPieceSize - 0x10
     @inlineCallbacks
-    def begin(self,uri,handler):
+    def begin(self,uri):
         data = yield memory.extract(self.nextStep,uri)
         nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
@@ -207,11 +208,12 @@ class Extracter:
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
                         baseLevel = uri[0]
-                        uri = uri[1:]
+                        topURI = uri[1:]
                         logging.info(12,'Making raw extracter',nonce)
                         nextStepw = RawExtracter(self.nextStep,baseLevel,key,nonce)
                         nextStepw.wrap()
-                        returnValue(nextStepw)
+                        topPiece = yield memory.extract(nextStepw,topURI)
+                        returnValue((nextStepw,topPiece))
         raise RuntimeError("You don't have a key for this file.")
 
 def context(subins,subreq):
@@ -273,5 +275,6 @@ def checkSignature(extracter,uri):
         verifyKey = nacl.signing.VerifyKey(pub)
         logging.info(15,keylib.decode(pub),keylib.decode(verifyKey.encode()))
         verifyKey.verify(uri,signature)
+        logging.info(16,'verified',uri)
         return uri
     return memory.extract(extracter,uri).addCallback(doVerify)

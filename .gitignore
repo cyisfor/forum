@@ -1,0 +1,12 @@
+deferred/
+deferredGraph/
+*.dot
+*.png
+*.shelve
+dependencies.sh
+test2.dat
+pieces/
+libsodium/
+.*.swp
+__pycache__/
+

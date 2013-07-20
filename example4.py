@@ -44,25 +44,32 @@ class Inserter(generic.Inserter):
 
 def example():
     @deferred.inlineCallbacks
-    def gotURI(uri,inserter,extracter):
-        logging.info(2,'got uri '+str(uri))
+    def begun(extracter,theSignature):
+        theFile = yield crypto.checkSignature(extracter,theSignature)
+        ret = yield generic.extractToFile(extracter,'test2.dat',theFile)
+        deferred.returnValue(ret)
+
+    @deferred.inlineCallbacks
+    def gotURI(theFile,ins,cryptins):
+        logging.info(16,'got uri '+str(theFile))
         skey = crypto.makeKey(ins,signing=True)
         logging.info(14,'signing key',skey)
-        uri = yield crypto.sign(inserter,skey,uri)
-        logging.info(3,'signature uri '+str(uri))
-        uri = yield crypto.checkSignature(extracter,uri)
-        yield generic.extractToFile(extracter,'test2.dat',uri)
+        theSignature = yield crypto.sign(cryptins,skey,theFile)
+        logging.info(3,'signature uri '+str(theSignature))
+        cryptpiece = yield cryptins.commit(theSignature)
+        crypto.Extracter(Extracter()).begin(cryptpiece).addCallback(begun)
+
     with graph("graph.dot") as graphderp:
         ins = Inserter(graphderp)
         key = crypto.makeKey(ins)
         info.currentIdentity = key
         logging.log(4,'got key',key,keylib.decode(key))
-        ins,ext = crypto.context(ins,Extracter())
+        cryptins = crypto.Inserter(ins)
         inp = open('test.dat','rb')
         def close(derp):
             inp.close()
             return derp
-        ins.add(inp,(key,)).addCallbacks(close,close).addCallback(gotURI,ins,ext)
+        cryptins.add(inp,(key,)).addCallbacks(close,close).addCallback(gotURI,ins,cryptins)
         deferreds.run()
 
 example()
