@@ -21,7 +21,7 @@ def makeHash(b):
 try: os.mkdir('pieces')
 except OSError: pass
 
-info = info.Info(0xffff,len(makeHash(b'')))
+info = info.Info(0x80,len(makeHash(b'')))
 
 class Extracter(extracter.Extracter):
     def __init__(self):
@@ -44,19 +44,21 @@ class Inserter(generic.Inserter):
 
 def example():
     @deferred.inlineCallbacks
-    def begun(extracter,theSignature):
+    def begun(result):
+        extracter,theSignature = result
+        logging.info(18,"Extracted signature",theSignature)
         theFile = yield crypto.checkSignature(extracter,theSignature)
         ret = yield generic.extractToFile(extracter,'test2.dat',theFile)
         deferred.returnValue(ret)
 
     @deferred.inlineCallbacks
     def gotURI(theFile,ins,cryptins):
-        logging.info(16,'got uri '+str(theFile))
+        logging.info(18,'added '+str(theFile))
         skey = crypto.makeKey(ins,signing=True)
-        logging.info(14,'signing key',skey)
         theSignature = yield crypto.sign(cryptins,skey,theFile)
-        logging.info(3,'signature uri '+str(theSignature))
+        logging.info(18,'signed uri '+str(theSignature))
         cryptpiece = yield cryptins.commit(theSignature)
+        logging.info(18,'crypt uri '+str(cryptpiece))
         crypto.Extracter(Extracter()).begin(cryptpiece).addCallback(begun)
 
     with graph("graph.dot") as graphderp:

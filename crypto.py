@@ -113,20 +113,19 @@ class Inserter(Cryptothing):
         if level == 0: ctr += 1
         nonce = self.getNonce(ctr,level+self.baseLevel)
         def gotHash(hasht):
-            logging.info(16,'inserting',hasht,ctr,level,self.baseLevel)
+            logging.info(18,'inserting',hasht,ctr,level,self.baseLevel)
             return hasht
         return subInsertPiece(exNonce(self.box.encrypt(piece,nonce)),ctr,level).addCallback(gotHash)
     def finish(self,subFinish):
-        logging.info(4,'finishing',subFinish)
         def increaseBaseLevel(uri):
-            self.baseLevel += uri[0] + 1 # + 1 for the -1 level leaf pieces
+            self.baseLevel += uri[0] + 1 # 1 extra for the leaf levels
             return uri
         return subFinish().addCallback(increaseBaseLevel)
     def commit(self,topURI):
         self.finished = True
         nonce = self.getNonce(0,0)
         # fine to reuse the nonce because each key is different
-        uri = struct.pack('B',self.baseLevel)+topURI
+        uri = struct.pack('B',self.baseLevel-1)+topURI
         chash = self.box.encrypt(uri,nonce)
         #assert(chash[:len(nonce)]==nonce)
         # do NOT exNonce this... we need to save the base nonce, once
@@ -158,8 +157,9 @@ class RawExtracter(Cryptothing):
         super().__init__(sub,key,nonce)
     def extract(self,subExtract,url,handler):
         depth = url[0]
+        logging.info(18,'depth of',depth,self.baseLevel)
         def reduceBaseLevel(thing):
-            self.baseLevel -= (depth + 1)
+            self.baseLevel -= depth + 2 # XXX: +2? what's goin on here?
             return thing
         return subExtract(url,handler).addCallback(reduceBaseLevel)
     @inlineCallbacks
@@ -167,7 +167,7 @@ class RawExtracter(Cryptothing):
         piece = yield subRequestPiece(hasht,ctr,level)
         if level == 0: ctr += 1
         nonce = self.getNonce(ctr,level+self.baseLevel)
-        logging.info(16,'extracting',hasht,ctr,level)
+        logging.info(18,'extracting',hasht,ctr,level,self.baseLevel)
         returnValue(self.box.decrypt(piece,nonce))
 
 # determined experimentally
@@ -184,6 +184,7 @@ class Extracter:
     @inlineCallbacks
     def begin(self,uri):
         data = yield memory.extract(self.nextStep,uri)
+        logging.info(18,'begin extraction data = ',len(data))
         nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
                 2 + self.hashSize + 0x10,
@@ -207,7 +208,7 @@ class Extracter:
                         box = nacl.secret.SecretBox(key)
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
-                        baseLevel = uri[0]
+                        baseLevel = uri[0] - 1
                         topURI = uri[1:]
                         logging.info(12,'Making raw extracter',nonce)
                         nextStepw = RawExtracter(self.nextStep,baseLevel,key,nonce)
@@ -268,13 +269,11 @@ def sign(inserter,pub,uri):
     except PleaseClone:
         return inserter.clone().add(data)
 
-def checkSignature(extracter,uri):
-    def doVerify(data):
-        logging.info(15,'verifying',len(data))
-        pub,uri,signature = splitOffsets(data,nacl.nacl.lib.crypto_sign_PUBLICKEYBYTES,extracter.hashSize+1)
-        verifyKey = nacl.signing.VerifyKey(pub)
-        logging.info(15,keylib.decode(pub),keylib.decode(verifyKey.encode()))
-        verifyKey.verify(uri,signature)
-        logging.info(16,'verified',uri)
-        return uri
-    return memory.extract(extracter,uri).addCallback(doVerify)
+def checkSignature(extracter,data):
+    logging.info(15,'verifying',len(data))
+    pub,uri,signature = splitOffsets(data,nacl.nacl.lib.crypto_sign_PUBLICKEYBYTES,extracter.hashSize+1)
+    verifyKey = nacl.signing.VerifyKey(pub)
+    logging.info(15,keylib.decode(pub),keylib.decode(verifyKey.encode()))
+    verifyKey.verify(uri,signature)
+    logging.info(16,'verified',uri)
+    return uri

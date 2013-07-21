@@ -58,7 +58,7 @@ class Inserter:
             logging.debug(0,'nacarry %x %x',level,len(platform))
         return deferred.succeed(platform)
     def finish(self):
-        logging.debug(4,'finishing plain')
+        logging.info(18,'finishing plain')
         self.finalizing = True
         def carriedUp(bottom,level):
             if level + 1 < len(self.levels):
@@ -72,7 +72,7 @@ class Inserter:
             except:
                 print(self.levels,platform)
                 raise
-            logging.debug(4,'finished plain',result,depth)
+            logging.debug(18,'finished plain',result,depth)
             self.levels.clear()
             return deferred.succeed(keylib.Key(struct.pack('B',depth)+result))
         return self.maybeCarry(0).addCallback(carriedUp,0).addCallback(makeURI)

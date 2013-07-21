@@ -8,5 +8,6 @@ test2.dat
 pieces/
 libsodium/
 .*.swp
+*.pyc
 __pycache__/
 
