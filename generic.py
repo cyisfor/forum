@@ -29,7 +29,9 @@ class Inserter(inserter.Inserter):
         returnValue(ret)
     @inlineCallbacks
     def addPieces(self,pieces):
-        if len(pieces) < self.hashSize:
+        if not isinstance(pieces,bytes):
+            pieces = b''.join(pieces)
+        if len(pieces) < self.keySize:
             raise RuntimeError("Just embed the file itself!")
         for i in range(int(len(pieces)/self.maximumPieceSize+1)):
             yield self.addPiece(pieces[i*self.maximumPieceSize:(i+1)*self.maximumPieceSize],i)
@@ -57,7 +59,10 @@ def extract(extracter,uri,gotPiece=None):
     return extracter.extract(uri,leafHash)
 
 def extractToFile(extracter,dest,uri):
-    out = open(dest,'wb')
+    if hasattr(dest,'read'):
+        out = dest
+    else:
+        out = open(dest,'wb')
     def writer(piece,which):
         logging.info(13,'writing piece %x max = %x %x %x %s',which,extracter.maximumPieceSize,which*extracter.maximumPieceSize,len(piece),piece[:5])
         out.seek(which*extracter.maximumPieceSize)

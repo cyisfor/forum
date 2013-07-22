@@ -129,7 +129,7 @@ class Inserter(Cryptothing):
         chash = self.box.encrypt(uri,nonce)
         #assert(chash[:len(nonce)]==nonce)
         # do NOT exNonce this... we need to save the base nonce, once
-        if not len(chash)==2 + self.hashSize + nacl.secret.SecretBox.NONCE_SIZE + 0x10:
+        if not len(chash)==2 + self.keySize + nacl.secret.SecretBox.NONCE_SIZE + 0x10:
             raise RuntimeError('Oh no',hex(len(chash)),hex(len(uri)),hex(len(chash)-len(uri)))
         # not nonce + because nonce is already prepended by self.box.encrypt!
         data = chash + self.info.currentIdentity
@@ -159,7 +159,7 @@ class RawExtracter(Cryptothing):
         depth = url[0]
         logging.info(18,'depth of',depth,self.baseLevel)
         def reduceBaseLevel(thing):
-            self.baseLevel -= depth + 2 # XXX: +2? what's goin on here?
+            self.baseLevel -= depth + 3 # XXX: +2? what's goin on here?
             return thing
         return subExtract(url,handler).addCallback(reduceBaseLevel)
     @inlineCallbacks
@@ -179,15 +179,15 @@ def slotSplit(b):
 class Extracter:
     def __init__(self,nextStep):
         self.nextStep = nextStep
-        self.hashSize = nextStep.hashSize
+        self.keySize = nextStep.keySize
         self.maximumPieceSize = nextStep.maximumPieceSize - 0x10
     @inlineCallbacks
     def begin(self,uri):
-        data = yield memory.extract(self.nextStep,uri)
+        data = yield memory.extractFull(self.nextStep,uri)
         logging.info(18,'begin extraction data = ',len(data))
         nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
-                2 + self.hashSize + 0x10,
+                2 + self.keySize + 0x10,
                 nacl.public.PublicKey.SIZE)
         logging.info(12,'YAY got crypto wrapper',keylib.decode(nonce))
         theirKey = nacl.public.PublicKey(theirKey)
@@ -208,13 +208,12 @@ class Extracter:
                         box = nacl.secret.SecretBox(key)
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
-                        baseLevel = uri[0] - 1
+                        baseLevel = uri[0] - 2
                         topURI = uri[1:]
                         logging.info(12,'Making raw extracter',nonce)
                         nextStepw = RawExtracter(self.nextStep,baseLevel,key,nonce)
                         nextStepw.wrap()
-                        topPiece = yield memory.extract(nextStepw,topURI)
-                        returnValue((nextStepw,topPiece))
+                        returnValue((nextStepw,topURI))
         raise RuntimeError("You don't have a key for this file.")
 
 def context(subins,subreq):
@@ -260,7 +259,7 @@ def getPrivate(keyid,signing=False):
 def sign(inserter,pub,uri):
     priv = getPrivate(pub,signing=True)
     signature = priv.sign(uri)
-    assert len(uri) == inserter.hashSize + 1
+    assert len(uri) == inserter.keySize + 1
     logging.info(16,'hmm',type(signature))
     data = pub + uri + signature.signature
     logging.info(15,'signing',keylib.decode(data[:len(pub)]))
@@ -269,11 +268,13 @@ def sign(inserter,pub,uri):
     except PleaseClone:
         return inserter.clone().add(data)
 
-def checkSignature(extracter,data):
+@inlineCallbacks
+def checkSignature(extracter,uri):
+    data = yield memory.extractFull(extracter,uri)
     logging.info(15,'verifying',len(data))
-    pub,uri,signature = splitOffsets(data,nacl.nacl.lib.crypto_sign_PUBLICKEYBYTES,extracter.hashSize+1)
+    pub,uri,signature = splitOffsets(data,nacl.nacl.lib.crypto_sign_PUBLICKEYBYTES,extracter.keySize+1)
     verifyKey = nacl.signing.VerifyKey(pub)
     logging.info(15,keylib.decode(pub),keylib.decode(verifyKey.encode()))
     verifyKey.verify(uri,signature)
     logging.info(16,'verified',uri)
-    return uri
+    returnValue(uri)

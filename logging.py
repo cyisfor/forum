@@ -30,13 +30,23 @@ def skip(f):
 
 
 
-def log(stage,msg,*a):
-    if stage < currentStage: return
+def log(*a):
+    if len(a)<2:
+        stage = currentStage
+        msg = a[0]
+        a = []
+    else:
+        stage, msg, *a = a
+        if stage < currentStage: return
     if isinstance(msg,str) and '%' in msg:
-        msg = msg % a
+        try:
+            msg = msg % tuple(a)
+        except:
+            print(msg,a)
+            raise
     else:
         msg = str(msg) + ' ' + ' '.join((repr(i) for i in a))
     f = caller()
     sys.stderr.write(str(stage) + ' ' + os.path.basename(f.f_code.co_filename)+'('+str(f.f_lineno)+'): '+msg+"\n")
 
-info = debug = log
+info = debug = error = log

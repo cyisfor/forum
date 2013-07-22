@@ -1,5 +1,5 @@
 class Info:
-    def __init__(self,maximumPieceSize,hashSize):
-        self.keysPerPiece = int(maximumPieceSize / hashSize)
+    def __init__(self,maximumPieceSize,keySize):
+        self.keysPerPiece = int(maximumPieceSize / keySize)
         self.maximumPieceSize = maximumPieceSize
-        self.hashSize = hashSize
+        self.keySize = keySize

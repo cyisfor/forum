@@ -5,6 +5,8 @@ import generic,extracter,info,memory
 import graph
 import keylib
 
+from io import BytesIO
+from itertools import count
 import os
 
 from hashlib import sha512
@@ -20,7 +22,7 @@ def makeHash(b):
 try: os.mkdir('pieces')
 except OSError: pass
 
-info = info.Info(0x200,len(makeHash(b'')))
+info = info.Info(0xffff,len(makeHash(b'')))
 
 class Extracter(extracter.Extracter):
     def __init__(self):
@@ -42,23 +44,18 @@ class Inserter(generic.Inserter):
         return deferred.succeed(hasht)
 
 def example():
+    with open('test.dat','rb') as inp:
+        base = inp.read()
     @deferred.inlineCallbacks
-    def gotURI(theFile,ins):
+    def gotURI(theFile):
+        dest = BytesIO()
         ext = Extracter()
-        hashes = yield memory.extract(ext,theFile)
-        size = 0
-        for key in ext.keySplit(hashes):
-            data = yield memory.extract(ext,key)
-            size += len(data)
-        print("Memory yielded",size)
-        raise SystemExit
+        um = yield generic.extractToFile(ext,dest,theFile)
+        logging.info(19,"Memory yielded",um)
+        assert(dest.getvalue()==base)
     with graph("graph.dot") as graphderp:
         ins = Inserter(graphderp)
-        inp = open('test.dat','rb')
-        def close(derp):
-            inp.close()
-            return derp
-        ins.add(inp).addCallbacks(close,close).addCallback(gotURI,ins)
+        ins.add(base).addCallback(gotURI)
         deferreds.run()
 
 example()

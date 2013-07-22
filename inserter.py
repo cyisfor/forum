@@ -18,7 +18,7 @@ class Inserter:
         self.graph = graph
         self.keysPerPiece = info.keysPerPiece
         self.maximumPieceSize = info.maximumPieceSize
-        self.hashSize = info.hashSize
+        self.keySize = info.keySize
     def addLevel(self,key,level):
         logging.debug(13,'addlevel %s at %s ',key,level)
         assert(key)
