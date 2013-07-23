@@ -9,9 +9,9 @@ def decode(b):
 class DerpKey(bytes):
     type = 'CHK'
     def __str__(self):
-        return decode(self)
+        return decode(self)[:4]
     def __repr__(self):
-        return self.type+'('+decode(self)+')'
+        return self.type+'('+decode(self)[:4]+')'
 
 def Key(b,type='CHK'):
     key = DerpKey(b)

@@ -20,19 +20,16 @@ class Inserter:
         self.maximumPieceSize = info.maximumPieceSize
         self.keySize = info.keySize
     def addLevel(self,key,level):
-        logging.debug(13,'addlevel %s at %s ',key,level)
         assert(key)
         if len(self.levels) == level:
             self.levels.append(HashLevel())
         def bottomderp(bottom):
-            logging.debug(13,'level {} ++totalnum {}'.format(level,self.levels[level].totalNum))
             self.levels[level].append(key)
             self.levels[level].totalNum += 1
             return bottom
         # make room for the key first
         return self.maybeCarry(level).addCallback(bottomderp)
     def maybeCarry(self,level):
-        logging.debug(0,'carry %s',self.levels)
         platform = self.levels[level]
         if ( self.finalizing and (len(platform) > 1 or (len(platform)==1 and level + 1 < len(self.levels)) )) or ( len(platform) >= self.keysPerPiece ):
             ctr = platform.totalNum
@@ -53,12 +50,9 @@ class Inserter:
                 upper = self.levels[level+1]
             else:
                 upper = False
-            return self.insertPiece(keylib.join(platform),upper.totalNum if upper else 0,level+1).addCallback(gotkey)
-        else:
-            logging.debug(0,'nacarry %x %x',level,len(platform))
+            return self.insertPiece(keylib.join(platform),upper.totalNum if upper else 0,level).addCallback(gotkey)
         return deferred.succeed(platform)
     def finish(self):
-        logging.info(18,'finishing plain')
         self.finalizing = True
         def carriedUp(bottom,level):
             if level + 1 < len(self.levels):
@@ -66,13 +60,13 @@ class Inserter:
             else:
                 return deferred.succeed(bottom)
         def makeURI(platform):
-            depth = len(self.levels)
+            depth = len(self.levels) - 1
             try:
                 result = platform[0]
             except:
                 print(self.levels,platform)
                 raise
-            logging.debug(18,'finished plain',result,depth)
+            logging.debug(18,'finished plain',result,logging.color('blue',depth))
             self.levels.clear()
             return deferred.succeed(keylib.Key(struct.pack('B',depth)+result))
         return self.maybeCarry(0).addCallback(carriedUp,0).addCallback(makeURI)

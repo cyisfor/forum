@@ -17,6 +17,8 @@ except cffi.ffiplatform.VerificationError:
 
 ######### crypto interface starts here
 
+dummy = True
+
 import logging
 
 import wrapper
@@ -69,11 +71,17 @@ class Cryptothing(wrapper.Wrapper):
         if key:
             self.key = key
         else:
-            self.key = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
+            if dummy:
+                self.key = b'K'*nacl.secret.SecretBox.KEY_SIZE
+            else:
+                self.key = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
         if base:
             self.base = bytes_to_long(base)
         else:
-            self.base = bytes_to_long(nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE))
+            if dummy:
+                self.base = bytes_to_long(b'N'*nacl.secret.SecretBox.NONCE_SIZE)
+            else:
+                self.base = bytes_to_long(nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE))
         self.box = nacl.secret.SecretBox(self.key)
         logging.info(4,'Skey is',self.key)
     def getNonce(self,ctx,level):
@@ -113,7 +121,7 @@ class Inserter(Cryptothing):
         if level == 0: ctr += 1
         nonce = self.getNonce(ctr,level+self.baseLevel)
         def gotHash(hasht):
-            logging.info(18,'inserting',hasht,ctr,level,self.baseLevel)
+            logging.info(18,'inserting',hasht,ctr,'<span style="color: blue">',level,'</span>',self.baseLevel)
             return hasht
         return subInsertPiece(exNonce(self.box.encrypt(piece,nonce)),ctr,level).addCallback(gotHash)
     def finish(self,subFinish):
@@ -157,7 +165,7 @@ class RawExtracter(Cryptothing):
         super().__init__(sub,key,nonce)
     def extract(self,subExtract,url,handler):
         depth = url[0]
-        logging.info(18,'depth of',depth,self.baseLevel)
+        logging.info(18,'key',self.key,'depth of',depth,self.baseLevel)
         def reduceBaseLevel(thing):
             self.baseLevel -= depth + 3 # XXX: +2? what's goin on here?
             return thing
@@ -167,7 +175,7 @@ class RawExtracter(Cryptothing):
         piece = yield subRequestPiece(hasht,ctr,level)
         if level == 0: ctr += 1
         nonce = self.getNonce(ctr,level+self.baseLevel)
-        logging.info(18,'extracting',hasht,ctr,level,self.baseLevel)
+        logging.info(18,'requesting',hasht,ctr,logging.color('blue',level),self.baseLevel)
         returnValue(self.box.decrypt(piece,nonce))
 
 # determined experimentally
@@ -184,12 +192,13 @@ class Extracter:
     @inlineCallbacks
     def begin(self,uri):
         data = yield memory.extractFull(self.nextStep,uri)
+        assert(len(data) > 0)
         logging.info(18,'begin extraction data = ',len(data))
         nonce,chash,theirKey,slots = splitOffsets(data,
                 nacl.secret.SecretBox.NONCE_SIZE,
                 2 + self.keySize + 0x10,
                 nacl.public.PublicKey.SIZE)
-        logging.info(12,'YAY got crypto wrapper',keylib.decode(nonce))
+        logging.info(19,'YAY got crypto wrapper',keylib.decode(nonce))
         theirKey = nacl.public.PublicKey(theirKey)
         slots = tuple(slotSplit(slots))
         with aShelf('privateKeys.shelve') as privateKeys:
@@ -202,15 +211,14 @@ class Extracter:
                     except nacl.exceptions.CryptoError as e:
                         logging.info(10,'huh?',e)
                         continue
-                    logging.info(11,'Yay we found a key!')
                     if bytes_to_long(plain[0:8])==0:
                         key = plain[8:]
                         box = nacl.secret.SecretBox(key)
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
-                        baseLevel = uri[0] - 2
+                        baseLevel = uri[0] - 1
                         topURI = uri[1:]
-                        logging.info(12,'Making raw extracter',nonce)
+                        logging.info(20,'Making raw extracter',nonce,baseLevel,keylib.Key(topURI,'URI'))
                         nextStepw = RawExtracter(self.nextStep,baseLevel,key,nonce)
                         nextStepw.wrap()
                         returnValue((nextStepw,topURI))
@@ -231,11 +239,18 @@ def context(subins,subreq):
 def makeKey(inserter,signing=False):
     if signing:
         cls = nacl.signing.SigningKey
+        size = nacl.nacl.lib.crypto_sign_PUBLICKEYBYTES
         dest = 'signingKeys.shelve'
     else:
         cls = nacl.public.PrivateKey
+        size = cls.SIZE
         dest = 'privateKeys.shelve'
-    priv = cls.generate()
+
+    if dummy:
+        priv = cls(b'Q'*size)
+    else:
+        priv = cls.generate()
+
     if signing:
         keyid = priv.verify_key.encode()
     else:
