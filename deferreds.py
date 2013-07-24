@@ -64,9 +64,9 @@ def run():
     try: os.mkdir('deferredGraph')
     except OSError: pass
     while len(deferreds):
-        with graph('deferredGraph/pass{}.dot'.format(next(stage))) as g:
-            for d in deferreds:
-                graphtree(d,g)
+#        with graph('deferredGraph/pass{}.dot'.format(next(stage))) as g:
+#            for d in deferreds:
+#                graphtree(d,g)
         rem = set()
         for d in copy.copy(deferreds):
             if d.called:

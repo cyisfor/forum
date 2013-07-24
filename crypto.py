@@ -17,7 +17,7 @@ except cffi.ffiplatform.VerificationError:
 
 ######### crypto interface starts here
 
-dummy = True
+dummy = False
 
 import logging
 
@@ -83,6 +83,7 @@ class Cryptothing(wrapper.Wrapper):
             else:
                 self.base = bytes_to_long(nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE))
         self.box = nacl.secret.SecretBox(self.key)
+        self.key = keylib.Key(self.key,'SYM')
         logging.info(4,'Skey is',self.key)
     def getNonce(self,ctx,level):
         ret = self.base ^ (0x100*ctx + level)
@@ -216,9 +217,11 @@ class Extracter:
                         box = nacl.secret.SecretBox(key)
                         # ok to reuse nonce because this is a different key
                         uri = box.decrypt(chash,nonce)
-                        baseLevel = uri[0] - 1
+                        # subtract the initial depth first
+                        # (just as we add the initial depth last when inserting)
+                        baseLevel = uri[0] - uri[1]
                         topURI = uri[1:]
-                        logging.info(20,'Making raw extracter',nonce,baseLevel,keylib.Key(topURI,'URI'))
+                        logging.info(20,'Making raw extracter',keylib.Key(nonce,'NONCE'),baseLevel,keylib.Key(topURI,'URI'))
                         nextStepw = RawExtracter(self.nextStep,baseLevel,key,nonce)
                         nextStepw.wrap()
                         returnValue((nextStepw,topURI))

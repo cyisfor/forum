@@ -21,7 +21,7 @@ def makeHash(b):
 try: os.mkdir('pieces')
 except OSError: pass
 
-info = info.Info(0xffff,len(makeHash(b'')))
+info = info.Info(0x80,len(makeHash(b'')))
 
 class Extracter(extracter.Extracter):
     def __init__(self):
@@ -43,20 +43,30 @@ class Inserter(generic.Inserter):
         return deferred.succeed(hasht)
 
 def example():
-    def gotURI(uri,extracter):
-        logging.info(2,'got uri '+str(uri))
-        return generic.extractToFile(extracter,'test2.dat',uri)
+    @deferred.inlineCallbacks
+    def begun(result):
+        extracter,theFile = result
+        ret = yield generic.extractToFile(extracter,'test2.dat',theFile)
+        deferred.returnValue(ret)
+
+    @deferred.inlineCallbacks
+    def gotURI(theFile,ins,cryptins):
+        logging.info(18,'added '+str(theFile))
+        cryptpiece = yield cryptins.commit(theFile)
+        logging.info(18,'crypt uri '+str(cryptpiece))
+        crypto.Extracter(Extracter()).begin(cryptpiece).addCallback(begun)
+
     with graph("graph.dot") as graphderp:
         ins = Inserter(graphderp)
         key = crypto.makeKey(ins)
         info.currentIdentity = key
         logging.log(4,'got key',key,keylib.decode(key))
-        ins,ext = crypto.context(ins,Extracter())
+        cryptins = crypto.Inserter(ins)
         inp = open('test.dat','rb')
         def close(derp):
             inp.close()
             return derp
-        ins.add(inp,(key,)).addCallbacks(close,close).addCallback(gotURI,ext)
+        cryptins.add(inp,(key,)).addCallbacks(close,close).addCallback(gotURI,ins,cryptins)
         deferreds.run()
 
 example()

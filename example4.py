@@ -46,7 +46,7 @@ def example():
     @deferred.inlineCallbacks
     def begun(result):
         extracter,theSignature = result
-        logging.info(18,"Extracted signature",theSignature)
+        logging.info(18,"Extracted signature")
         theFile = yield crypto.checkSignature(extracter,theSignature)
         ret = yield generic.extractToFile(extracter,'test2.dat',theFile)
         deferred.returnValue(ret)

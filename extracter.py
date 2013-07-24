@@ -11,6 +11,8 @@ Must know how many pieces before in this hash level, as well as how many hashes 
 as well as what level this is...
 """
 
+### Note: this extracts the hash tree, not the leaf pieces!
+
 class Extracter(requester.Requester):
     def __init__(self,info):
         self.info = info
@@ -28,11 +30,14 @@ class Extracter(requester.Requester):
         else:
             hasht = uri
         if maxDepth == 0:
-            return self.requestPiece(hasht,0,-1).addCallback(handler,1)
+            # YOU LOSE
+            # YOU GET NOTHING
+            # GOOD DAY SIR
+            return handler(hasht,0)
         # XXX: need the exact offset in pieces from the left
         def downOneLevel(piece,upperBreadth,level,lasthasht):
             logging.info(18,"going down one level to",level,'from',lasthasht)
-            logging.info(19,keylib.decode(piece))
+            #logging.info(19,keylib.decode(piece))
             hashes = list(self.keySplit(piece))
             defs = []
             for i,hasht in enumerate(hashes):
