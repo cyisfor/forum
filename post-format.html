@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="content-type" value="text/html; charset=utf-8">
+<title>Post Format</title>
+</head><body>
+<h1>Post Format</h1>
+<p>The format of emails, let's call them messages, should probably be XML. I know <a href="http://c2.com/cgi/wiki?XmlSucks">XML Sucks</a>, but the other choices don't fit well. A message, in my opinion, is fundamentally a document, and any formatting or links in that document would be better suited as markup than anything. I think the problem of namespace musical chairs can be resolved if you have a way to look them up by content hash. Documents can be made immutable, links and all in fact, if they link by content hash key. Avoiding some of the XML pitfalls such as <ul>
+<li>use base64 embedded data fucking anywhere</li>
+<li>require javascript/non-XML</li> 
+<li>use the contents of tags as arguments, not as non-regular content</li>
+<li>use multiple namespaces (you can make a namespace that just combines the elements from the ones you like into a single namespace as a static resource)</li>
+<li>have stuff in it that indicates programmatic behavior</li>
+<li>depend on whitespace</li>
+<li>embed XML inside XML (this counts as multiple namespaces)</li>
+<li>use XPath</li>
+<li>have different tags for linking to different types of files.</li>
+<li>have different tags to indicate style instead of CSS</li>
+<li>have elements with different functions use the same tag.</li>
+</ul>
+ ...then I should be just fine. Please convince me differently! ;_;</p>
+<p>I'm also more familiar with XML, grudgingly, then say YAML or BEncoding, and there is more documentation about how to use XML than just about anything else.</p>
+<p>One thing I <u>will not do</u>
+ is use RFC822. If you're going to have to assume a message is RFC822 content type, to tell you that it's the same content-type as every other message, you might as well just assume that message is in that content type. A message's links can have other content types, but the message itself should be self descriptive, acting as the base for all content type determination.</p>
+<p>Sound good? Please anything I should change or do, or not do, let me know.</p>
+</body></html>
