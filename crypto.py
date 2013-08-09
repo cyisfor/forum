@@ -274,6 +274,15 @@ def getPrivate(keyid,signing=False):
     with aShelf(source) as privateKeys:
         return cls(privateKeys[keyid])
 
+def listPrivate(signing=False):
+    if signing:
+        source = 'signingKeys.shelve'
+    else:
+        source = 'privateKeys.shelve'
+    with aShelf(source) as privateKeys:
+        for keyid in privateKeys.keys():
+            yield keylib.Key(keyid,type='SIGN' if signing else 'ENCRYPT')
+
 def sign(inserter,pub,uri):
     priv = getPrivate(pub,signing=True)
     signature = priv.sign(uri)

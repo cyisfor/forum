@@ -32,12 +32,13 @@ def printFail(fail):
     fail.printTraceback()
     return fail
 
-oldSucceed = deferred.succeed
-def succeed(result):
-        d = deferred.Deferred()
-        d.delayedResult = result
-        return d
-deferred.succeed = succeed
+if False:
+    oldSucceed = deferred.succeed
+    def succeed(result):
+            d = deferred.Deferred()
+            d.delayedResult = result
+            return d
+    deferred.succeed = succeed
 
 oldic = deferred.inlineCallbacks
 def newic(f):

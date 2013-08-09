@@ -15,13 +15,10 @@ as well as what level this is...
 
 class Extracter(requester.Requester):
     def __init__(self,info):
+        super().__init__(info.keySize)
         self.info = info
-        self.keySize = info.keySize
         self.maximumPieceSize = info.maximumPieceSize
         self.keysPerPiece = info.keysPerPiece
-    def keySplit(self,b):
-        for i in range(int(len(b)/self.keySize)):
-            yield keylib.Key(b[i*self.keySize:(i+1)*self.keySize])
     def extract(self,uri,handler,maxDepth=None):
         if maxDepth is None:
             maxDepth=uri[0]
