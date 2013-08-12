@@ -1,4 +1,3 @@
-# just testing memory extraction
 import deferreds,deferred
 
 import generic,extracter,info,memory,reference
@@ -33,7 +32,9 @@ class Extracter(extracter.Extracter):
             piece = inp.read()
         return deferred.succeed(piece)
 
-refs = reference.Counter()
+import sshelf
+
+refs = None
 
 class Inserter(generic.Inserter):
     def __init__(self,graphderp):
@@ -59,6 +60,7 @@ class Deleter(Extracter):
         return super().requestPiece(hasht,ctr,level).addCallback(self.doDelete,hasht)
 
 def example():
+    global refs
     with open('test.dat','rb') as inp:
         base = inp.read()
     @deferred.inlineCallbacks
@@ -75,8 +77,10 @@ def example():
         print("OK now we try deleting the first...",file=sys.stderr)
         yield generic.extract(deleter,theFile)
     with graph("graph.dot") as graphderp:
-        ins = Inserter(graphderp)
-        ins.add(base).addCallback(gotURI,ins)
-        deferreds.run()
+        with sshelf.aShelf("references.db") as shell:
+            refs = reference.Counter(shell)
+            ins = Inserter(graphderp)
+            ins.add(base).addCallback(gotURI,ins)
+            deferreds.run()
 
 example()

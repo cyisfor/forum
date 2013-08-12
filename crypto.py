@@ -35,29 +35,9 @@ import nacl.utils
 import nacl.exceptions
 
 from contextlib import contextmanager
-import dbm
 import errno
 import time
-
-@contextmanager
-def aShelf(path):
-    db = None
-    try:
-        while True:
-            try:
-                db = dbm.open(path,'cs')
-                break
-            except OSError as e:
-                if e.errno == errno.EAGAIN:
-                    logging.info(16,'again?')
-                    time.sleep(0.1)
-                else:
-                    raise
-        yield db
-    finally:
-        if db:
-            db.close()
-
+from sshelf import aShelf
 
 def exNonce(b):
     # SIGH

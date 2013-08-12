@@ -21,8 +21,12 @@ class Extracter(requester.Requester):
         self.keysPerPiece = info.keysPerPiece
     def extract(self,uri,handler,maxDepth=None):
         if maxDepth is None:
-            maxDepth=uri[0]
-            hasht = keylib.Key(uri[1:])
+            if len(uri)==self.hashSize:
+                maxDepth=1
+                hasht=keylib.Key(uri)
+            else:
+                maxDepth=uri[0]
+                hasht = keylib.Key(uri[1:])
             logging.info(19,'new extract',maxDepth,keylib.Key(uri,'URI'),hasht)
         else:
             hasht = uri
