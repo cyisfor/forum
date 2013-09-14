@@ -13,13 +13,19 @@ class HashLevel(list):
 
 class Inserter:
     finalizing = False
-    def __init__(self,info,graph=None):
+    Extracter = None # for subclasses
+    def __init__(self,info=None,graph=None):
         self.info = info
         self.levels = []
         self.graph = graph
-        self.keysPerPiece = info.keysPerPiece
-        self.maximumPieceSize = info.maximumPieceSize
-        self.keySize = info.keySize
+        try: self.maximumPieceSize = info.maximumPieceSize
+        except ValueError:
+            self.maximumPieceSize = 0xffff
+        self.makeHash = keylib.makeHash # XXX: this seems hackish
+        self.keySize = keylib.keySize
+        self.keysPerPiece = int(self.maximumPieceSize / self.keySize)
+    def makeExtracter(self):
+        return self.Extracter(self.keySize,self.maximumPieceSize,self.keysPerPiece)
     def addLevel(self,key,level):
         assert(key)
         if len(self.levels) == level:

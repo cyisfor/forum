@@ -6,6 +6,8 @@ import deferred._defer
 import deferred
 from deferred.graph import graphtree,graph
 
+#raise RuntimeError("BL?AUH")
+
 from itertools import count
 
 import logging

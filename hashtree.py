@@ -1,13 +1,6 @@
 import inserter,extracter
 import logging
-
 class NoneLeft(Exception): pass
-
-"""requestPiece HAS to take a continuation so
-create an Extracter for every piece? Something to happen after piece is extracted.
-Must know how many pieces before in this hash level, as well as how many hashes before in this piece!
-as well as what level this is...
-"""
 
 class Extracter:
     def __init__(self,requester):

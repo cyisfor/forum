@@ -25,4 +25,11 @@ def Key(b,type='CHK'):
 def join(keys):
     return Key(b''.join(keys))
 
+from hashlib import sha512
 
+def makeHash(b):
+    derp = sha512()
+    derp.update(b)
+    return Key(derp.digest())
+
+keySize = len(makeHash(b''))

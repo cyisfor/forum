@@ -1,5 +1,3 @@
 class Info:
-    def __init__(self,maximumPieceSize,keySize):
-        self.keysPerPiece = int(maximumPieceSize / keySize)
+    def __init__(self,maximumPieceSize):
         self.maximumPieceSize = maximumPieceSize
-        self.keySize = keySize

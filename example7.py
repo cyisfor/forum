@@ -8,15 +8,8 @@ import keylib
 
 import os
 
-from hashlib import sha512
-
 
 import logging
-
-def makeHash(b):
-    derp = sha512()
-    derp.update(b)
-    return keylib.Key(derp.digest())
 
 try: os.mkdir('pieces')
 except OSError: pass

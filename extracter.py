@@ -14,11 +14,10 @@ as well as what level this is...
 ### Note: this extracts the hash tree, not the leaf pieces!
 
 class Extracter(requester.Requester):
-    def __init__(self,info):
-        super().__init__(info.keySize)
-        self.info = info
-        self.maximumPieceSize = info.maximumPieceSize
-        self.keysPerPiece = info.keysPerPiece
+    def __init__(self,keySize,maximumPieceSize,keysPerPiece):
+        super().__init__(keySize)
+        self.maximumPieceSize = maximumPieceSize
+        self.keysPerPiece = keysPerPiece
     def extract(self,uri,handler,maxDepth=None):
         if maxDepth is None:
             if len(uri)==self.hashSize:
