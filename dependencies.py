@@ -18,11 +18,11 @@ def run(*commands):
     raise SystemExit("Please examine, then run dependencies.sh as root (in "+here+")")
 
 def Import(module,*otherwise):
-    try: __import__(module)
+    try: return __import__(module)
     except ImportError: pass
     else: return
     run(*otherwise)
-    __import__(module)
+    return __import__(module)
 
 def git(where):
     def go():

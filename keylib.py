@@ -3,10 +3,10 @@ from bytelib import bytes_to_long,long_to_bytes
 import base64
 
 def decode(b):
-    return base64.b64encode(b).decode()
+    return base64.b64decode(b).decode()
     #return base64.b16encode(b).decode()
 def encode(s):
-    return base64.b64decode(s)
+    return base64.b64encode(s.encode())
 
 class DerpKey(bytes):
     type = 'CHK'
