@@ -1,6 +1,8 @@
 # I r so sly
 
-currentStage = 21
+import atexit
+
+currentStage = 10
 
 import sys,os
 
@@ -83,9 +85,11 @@ def log(*a):
         hues[fname] = hue
         nexthue += 79
     alog.write(li(('#E8E8E8' if next(count)%2==0 else 'white'),
-        color('red',str(stage)) + ' ' + color(rainbow(hue),os.path.basename(f.f_code.co_filename))+'('+str(f.f_lineno)+'): '+msg)+'\n')
+        color('red',str(stage)) + ' (' + color(rainbow(hue),os.path.basename(f.f_code.co_filename))+':'+str(f.f_lineno)+') '+msg)+'\n')
+    alog.flush()
     nexthue += 67
 
 info = debug = error = log
 
 alog.write('<html><head><title>Debug log</title></head><body><ul>\n')
+atexit.register(lambda: alog.write('</ul></body></html>\n'))

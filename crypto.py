@@ -11,7 +11,7 @@ try: dependencies.Import('nacl',
     "pip install pynacl",
     "echo from nacl import nacl | python")
 except PermissionError:
-    run("echo from nacl import nacl | python")
+    dependencies.run("echo from nacl import nacl | python")
 except cffi.ffiplatform.VerificationError:
     installSodium()
 

@@ -73,7 +73,7 @@ class Inserter:
             except:
                 print(self.levels,platform)
                 raise
-            logging.debug(18,'finished plain',result,logging.color('blue',depth))
+            logging.debug(19,'finished plain',result,logging.color('blue',depth))
             self.levels.clear()
             return deferred.succeed(keylib.Key(struct.pack('B',depth)+result))
         return self.maybeCarry(0).addCallback(carriedUp,0).addCallback(makeURI)

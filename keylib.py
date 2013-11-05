@@ -3,10 +3,14 @@ from bytelib import bytes_to_long,long_to_bytes
 import base64
 
 def decode(b):
-    return base64.b64decode(b).decode()
-    #return base64.b16encode(b).decode()
+    #return base64.b64decode(b).decode()
+    return base64.b64encode(b).decode()
 def encode(s):
-    return base64.b64encode(s.encode())
+    try:
+        return base64.b64decode(s.encode())
+    except:
+        print(s)
+        raise
 
 class DerpKey(bytes):
     type = 'CHK'
@@ -21,6 +25,20 @@ def Key(b,type='CHK'):
     key = DerpKey(b)
     key.type = type
     return key
+
+class DerpURI(DerpKey):
+    depth = None
+
+def URI(s,type='CHK'):
+    data = encode(s)
+    if len(data) == keySize:
+        uri = DerpURI(data)
+        uri.depth = 1
+    else:
+        uri = DerpURI(data[1:])
+        uri.depth = data[0]
+    uri.type = 'URI'+type
+    return uri
 
 def join(keys):
     return Key(b''.join(keys))

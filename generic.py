@@ -1,5 +1,5 @@
 import inserter
-from deferred import inlineCallbacks,returnValue
+from deferred import inlineCallbacks,returnValue,Failure,graph as g
 
 import logging
 from itertools import count
@@ -47,7 +47,6 @@ class Inserter(inserter.Inserter):
 def extract(extracter,uri,gotPiece=None):
     if gotPiece:
         def leafHash(hasht,which):
-            logging.info(12,'extracter.requpi',extracter,extracter.requestPiece)
             try: return extracter.requestPiece(hasht,which,-1).addCallback(gotPiece,which)
             except:
                 logging.info(11,'extracter is',extracter.requestPiece)
@@ -55,8 +54,14 @@ def extract(extracter,uri,gotPiece=None):
     else:
         def leafHash(hasht,which):
             return extracter.requestPiece(hasht,which,-1)
-    logging.info(6,"using extract",extracter.extract)
-    return extracter.extract(uri,leafHash)
+    logging.info(19,"using extract",extracter.extract)
+    with g.graph("def.dot") as graph:
+        d = extracter.extract(uri,leafHash)
+        if isinstance(d.result, Failure):
+            raise d.result.value
+        print(d)
+        g.tree(d,graph)
+    return d
 
 def extractToFile(extracter,dest,uri):
     if hasattr(dest,'read'):
@@ -70,4 +75,5 @@ def extractToFile(extracter,dest,uri):
         out.flush()
     def closer(mumble):
         out.close()
-    return extract(extracter,uri,writer)
+        return mumble
+    return extract(extracter,uri,writer).addCallbacks(closer,closer)

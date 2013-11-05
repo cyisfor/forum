@@ -25,9 +25,9 @@ class Extracter(requester.Requester):
                 maxDepth=1
                 hasht=keylib.Key(uri)
             else:
-                maxDepth=uri[0]
-                hasht = keylib.Key(uri[1:])
-            logging.info(19,'new extract',maxDepth,keylib.Key(uri,'URI'),hasht)
+                maxDepth = uri.depth
+                hasht = uri
+            logging.info(19,'new extract',maxDepth,uri,hasht)
         else:
             hasht = uri
         if maxDepth == 0:

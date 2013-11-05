@@ -31,7 +31,11 @@ class Wrapper:
     def _makeWrapper(self,name,top,bottom):
         @wraps(top)
         def wrapper(*a,**kw):
-            return top(bottom,*a,**kw)
+            try:
+                return top(bottom,*a,**kw)
+            except TypeError:
+                print(top,bottom)
+                raise
         return wrapper
     def __getattr__(self,name):
         v = getattr(self.sub,name)

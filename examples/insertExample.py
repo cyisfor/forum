@@ -1,6 +1,6 @@
 from deferred import inlineCallbacks
 import backends.files as backend
-from deferred.graph import graph
+import graph
 
 with graph('graph.dot') as graph:
 
