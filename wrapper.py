@@ -34,7 +34,7 @@ class Wrapper:
             try:
                 return top(bottom,*a,**kw)
             except TypeError:
-                print(top,bottom)
+                logging.error(20,top,bottom)
                 raise
         return wrapper
     def __getattr__(self,name):

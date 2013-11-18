@@ -72,7 +72,7 @@ def log(*a):
         try:
             msg = msg % tuple(a)
         except:
-            print(msg,a)
+            logging.error(100,msg,a)
             raise
     else:
         msg = str(msg) + ' ' + ' '.join((repr(i) for i in a))

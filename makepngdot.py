@@ -7,7 +7,6 @@ os.chdir('deferredGraph')
 for i in count(0):
     src = 'pass{}.dot'.format(i)
     if not os.path.exists(src): break
-    print(i)
     dst = 'pass{}.png'.format(i)
     call(['neato','-T','png','-o',dst,src])
     with open('index{}.html'.format(i),'wt') as out:

@@ -17,7 +17,7 @@ def stretchBucket(bucket,total):
         return newBucket
     except TypeError as e:
         import traceback
-        print(total)
+        logging.error(20,total)
         traceback.print_exc()
         raise SystemExit
 

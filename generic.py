@@ -59,7 +59,6 @@ def extract(extracter,uri,gotPiece=None):
         d = extracter.extract(uri,leafHash)
         if isinstance(d.result, Failure):
             raise d.result.value
-        print(d)
         g.tree(d,graph)
     return d
 
