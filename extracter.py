@@ -44,9 +44,7 @@ class Extracter(requester.Requester):
             for i,hasht in enumerate(hashes):
                 breadth = upperBreadth*self.keysPerPiece + i
                 if level == 0:
-                    # XXX:
-                    # but if level == 1 it's the second level of a hash tree right?
-                    # shouldn't it go to the -1 handler when level *IS* -1?
+                    # the next one down is -1, so let the -1 (leaf) handler take it.
                     d = handler(hasht,breadth)
                     if d: defs.append(d)
                 else:
