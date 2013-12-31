@@ -38,7 +38,7 @@ def URI(s,depth=None,type='CHK'):
         data = struct.pack('B',depth)+s
         uri = DerpURI(data)
         uri.depth = depth
-    elif len(data) == keySize:
+    elif len(s) == keySize:
         data = encode(s)
         uri = DerpURI(data)
         uri.depth = 1
@@ -46,7 +46,7 @@ def URI(s,depth=None,type='CHK'):
         data = encode(s)
         uri = DerpURI(data[1:])
         uri.depth = data[0]
-    uri.type = 'URI'+type
+    uri.type = type
     return uri
 
 def join(keys):

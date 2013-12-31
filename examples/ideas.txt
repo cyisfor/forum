@@ -1,0 +1,46 @@
+SACK style acknowledgement i.e. -> piece A -> piece B -> piece C -> ACK A,B,C
+one ACK slot per piece received, but if piece A comes in twice, two ACKs can be sent with it.
+perhaps ACK can be per-level. Like level 0 ACK, level 1 ACK?
+Can rebroadcast ACKs to neighboring peers (how to prioritize?)
+Mark each piece that has been ack'd for a given peer in a hash tree, and go no lower than 1 below the lowest one when transmitting pieces, so as to not overload destination's unknown piece buffers.
+    wouldn't that still overload it though at lower levels?
+    some way to globally limit "unknown" pieces (i.e. ones below ones below acknowledged ones)?
+
+...wouldn't an ACK of X pieces be the same as a hash list of X pieces?
+
+Maybe just repeatedly request...
+
+request piece A, transmits depth - level of them, then the pieces piece A lists, B,C,D, then nothing.
+request piece A again means it never arrived, just send A this time (ugh, state)
+request piece B again -> just send B
+request piece B.1 -> send B.1 and the pieces it lists B.1.1,B.1.2,B.1,3,etc
+
+so for each peer,
+   a list of requested + implied hashes (i.e. top plus the level below)
+
+when a piece request comes in, from a peer, 
+     check the list for that piece.
+        if in the list, just send that piece
+        else send that piece plus its lower level, add all to list
+
+more state...
+for each peer,
+    a list of unknown pieces received from that peer (LRU)
+    a list of hashes for pieces that we want from that peer
+
+when we want a file, add the root hash to the list of hashes for that peer
+
+regularly send piece requests from non-empty lists of wanted hashes for peers to peers
+
+when a piece is delivered from a peer,
+    check the unknown pieces for that piece. 
+        if in the list, demerit the peer somehow for sending redundant
+    add the piece to unknown pieces list.
+    if the piece is one in the list we want,
+        (*)
+        save the piece to permanent storage, merit the peer somehow
+        if the piece is a hash list, add its hashes to pieces we want
+            check the unknown pieces list for those hashes. for each piece
+                recurse to (*)
+    else
+        demerit the peer for sending unknown

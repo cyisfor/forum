@@ -21,12 +21,12 @@ class Extracter(requester.Requester):
         self.keysPerPiece = keysPerPiece
     def extract(self,uri,handler,maxDepth=None):
         if maxDepth is None:
-            if len(uri)==self.keySize:
-                maxDepth=1
-                hasht=keylib.Key(uri)
-            else:
+            if hasattr(uri,'depth'):
                 maxDepth = uri.depth
                 hasht = uri
+            else:
+                maxDepth=1
+                hasht=keylib.Key(uri)
             logging.info(19,'new extract',maxDepth,uri,hasht)
         else:
             hasht = uri
@@ -51,4 +51,5 @@ class Extracter(requester.Requester):
                     defs.append(self.requestPiece(hasht,breadth,level-1)
                             .addCallback(downOneLevel,breadth,level-1,hasht))
             return deferred.DeferredList(defs)
+        logging.info(18,"maxdepth is still",maxDepth)
         return self.requestPiece(hasht,0,maxDepth - 1).addCallback(downOneLevel,0,maxDepth - 1,hasht)

@@ -7,7 +7,7 @@ import os
 try: os.mkdir('pieces')
 except OSError: pass
 
-info = info.Info(0xffff)
+info = info.Info(0x100)
 
 class Extracter(extracter.Extracter):
     def requestPiece(self,hasht,ctr,level):

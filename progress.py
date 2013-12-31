@@ -38,7 +38,7 @@ class ProgressMeasurer(wrapper.Wrapper):
     def requestPiece(self,subreq,hasht,ctr,level):
         thisPiece = yield subreq(hasht,ctr,level)
         logging.info(19,"piece is",thisPiece[:4],self.targetLevel,ctr,level)
-        if self.targetLevel == level + 1:
+        if self.targetLevel == level:
             if self.target == ctr:
                 # now we're moving to a lower level (unless at the lowest)
                 self.targetLevel -= 1
@@ -50,9 +50,10 @@ class ProgressMeasurer(wrapper.Wrapper):
                 # because this is the hash of the list containing the target for this.
         if level < self.targetLevel:
             bucket = self.buckets[level]
-            logging.info(19,'got',ctr,self.possibleTotal,ctr*100/self.possibleTotal)
-            self.buckets[level] = bucket = stretchBucket(bucket,self.possibleTotal)
-            bucket[int(ctr* len(bucket) / self.possibleTotal)] += 1
+            logging.info(19,'got',ctr,self.possibleTotal,ctr*100/self.possibleTotal if self.possibleTotal else 'inf')
+            if self.possibleTotal:
+                self.buckets[level] = bucket = stretchBucket(bucket,self.possibleTotal)
+                bucket[int(ctr* len(bucket) / self.possibleTotal)] += 1
         self.showBucket(self.buckets[level])
         returnValue(thisPiece)
     def showBucket(self,bucket):
