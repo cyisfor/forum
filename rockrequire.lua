@@ -1,3 +1,4 @@
+require('luarocks.loader')
 function rockrequire(name,tries)
     tries =  tries or 0
     if tries > 2 then

@@ -4,7 +4,7 @@ local sodium = require('sodium')
 local b2l = bytelib.bytes_to_long
 local l2b = bytelib.long_to_bytes
 
-local mime = require('mime') -- yuck
+local conv = require('basexx') -- yuck
 
 function lopbyte(data) 
     local byte = string.byte(data,1)
@@ -13,7 +13,7 @@ end
 
 function decode(data) 
     if type(data) ~= 'string' then return data end
-    data = data.unb64(data)
+    data = conv.from_base64(data)
     if string.len(data) == keySize then
         return Key(data)
     elseif string.len(data) == keySize+1 then
@@ -27,10 +27,10 @@ function Key(data)
     return {
         data = data,
         encode = function()
-            return mime.b64(data)
+            return conv.to_base64(data)
         end,
         string = function()
-            return 'Key('..mime.b64(data)..')'
+            return 'Key('..conv.to_base64(data)..')'
         end
     }
 end
@@ -52,7 +52,7 @@ function URI(data, depth)
     return {
         key = key,
         encode = function()
-            return mime.b64(data)
+            return conv.to_base64(data)
         end,
         string = function()
             return 'URI('..key.string()..','..depth..')'
@@ -68,7 +68,7 @@ function join(keys)
     end
     return {
         data = data,
-        encode = function() return mime.b64(data) end,
+        encode = function() return conv.to_base64(data) end,
         string = function()
             return "KeyList("..#keys..")"
         end
