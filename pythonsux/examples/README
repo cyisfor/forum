@@ -1,9 +1,0 @@
-some examples...
-sh runexample.sh insertExample.py 
-    insert some stuff
-sh runexample.sh progressExample.py <uri>
-    show progress while saving back to test.dat
-sh runexample.sh exportExample.py <uri>
-    save pieces in portable fmt to "derp" (because python's binary stdout is broken)
-sh runexample.sh importExample.py <derp
-    load pieces into "database" from file derp
