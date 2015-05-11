@@ -163,7 +163,7 @@ What’s a link? It’s a bit of text called a URL. (or a URI more generally). T
 
 ...unfortunately “cid:” is woefully unsupported in major email browsers. But it’s a step in the right direction. And now with hash trees we can do it right!
 
-The email example ends with a bunch of attachments, each one being a collection of pieces that all add up to a root hash, one for each attachment. So if your root hash is “abcde” you could put “<img name="kittens.jpg" type="image/png" src="cid:abcde"/>” in your email, and then they’d see the image. Thus you can arrange your attachments how you like, and make a beautiful multi-media email that is efficient, secure, and considerate of the person you’re sending it to.
+The email example ends with a bunch of attachments, each one being a collection of pieces that all add up to a root hash, one for each attachment. So if your root hash is “abcde” you could put “&lt;img name="kittens.jpg" type="image/png" src="cid:abcde"/&gt;” in your email, and then they’d see the image. Thus you can arrange your attachments how you like, and make a beautiful multi-media email that is efficient, secure, and considerate of the person you’re sending it to.
 
 Now here’s the incredible thing. Root hashes are just 32 random-ish bytes. they aren’t just unique within a single email. They’re _globally_ unique. So let’s say I find an episode of a show I like, and send you a video about it. Remember you only get sent the ‘S‘ of the message without asking, and the rest of it you request as needed. You get the video and enjoy it, and I dunno, send a message to someone about how cool it is. But maybe I already sent the video to that someone. Are you going to send the video to them a second time?
 
