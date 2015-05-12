@@ -1,13 +1,12 @@
 package hashtree
 
 import (
-	calgo "aes" // blowfish, salsa20, whatever
+	calgo "aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256" // this is hard to generalize
 	"io"
-	"math/rand"
 	"os"
+	"sync" // blowfish, salsa20, whatever
 )
 
 type Piece []byte
@@ -28,6 +27,7 @@ type KeyValueStore interface {
 	Put(Hash, []byte) error
 	Get(Hash) ([]byte, error)
 	Flush() error
+	Close() error
 }
 
 /* This is actually a pair, of a key and a um...
@@ -65,20 +65,53 @@ type tiers []tier
 type DB struct {
 	store KeyValueStore
 	tiers tiers
+	dirty bool
+	flush sync.Cond
 }
 
-func New(store KeyValueStore) {
-	return DB{
+/*
+Flushes happen by themselves in batches, but some might hang out at the end
+indefinitely, if writes stop. So when the last write stops, a goroutine should
+sleep until the time of that write plus a delay, and if no writes adjusted
+the timer since, it should flush to clear out the last bit of pending writes
+
+tl;dr every write sets flushTime = time.Now().add(FLUSH_DELAY) then signals the flusher, and the flusher waits on a condition, then sleeps for flushTime.Sub(time.Now()), then checks if flushTime < time.Now()
+if yes, then flush and wait on condition. if no, then sleep again until yes
+*/
+
+const FLUSH_DELAY = 10
+
+func New(store KeyValueStore) DB {
+	self := DB{
 		store: store,
-		/*leveldb.Open(place, &ldb.Options{
-			// 128 mibibytes
-			WriteBufferSize: 0x8000000,
-			// compression on encrypted pieces?
-			Compression: ldb.NoCompression,
-			// storing 0xffff sized pieces, ey?
-			BlockSize: 0x10000,
-		}),*/
+		flush: sync.Cond(sync.Mutex{}),
 	}
+
+	go func() {
+		for {
+			self.flush.Lock()
+			for self.flushTime.Before(time.Now()) {
+				// only wait if nothing wrote needing a flush!
+				self.flush.Wait()
+			}
+			// check if we need to do anything
+			for self.flushTime.After(time.Now()) {
+				self.flush.Unlock()
+				time.Sleep(self.flushTime.Sub(time.Now()))
+				self.flush.Lock()
+			}
+			self.flush.Unlock()
+			// time to flush!
+			self.store.Flush()
+
+			time.sleep(FLUSH_DELAY)
+			self.dirty = false
+			self.flush.Unlock()
+			self.store.Flush()
+		}
+	}()
+
+	return self
 }
 
 // size of the serialized CHK (key, lookup)
@@ -197,8 +230,7 @@ func (h hashdb) Import(reader *io.Reader) (depth uint8, root CHK) {
 var ziv [calgo.BlockSize]byte // just leave this zero
 
 func (h hashdb) Insert(piece []byte) (CHK, error) {
-	key := make([]byte, 0x20)
-	rand.Rand(key)
+	key := DeriveKey(piece, nil)
 	block, err := calgo.NewCipher(key)
 	if err != nil {
 		panic(err)
@@ -220,7 +252,7 @@ func (h hashdb) Insert(piece []byte) (CHK, error) {
 func (h hashdb) Extract(chk CHK) ([]byte, error) {
 	var piece []byte
 	for {
-		if piece, err = h.ldb.Get(chk.lookup); err != nil {
+		if piece, err = h.store.Get(chk.lookup); err != nil {
 			// check if not found error
 			h.Fetch(chk.lookup)
 		} else {
