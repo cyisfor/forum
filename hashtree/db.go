@@ -1,55 +1,95 @@
+package hashtree
+
 import (
 	calgo "aes" // blowfish, salsa20, whatever
-	"crypto"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256" // this is hard to generalize
 	"io"
 	"math/rand"
 	"os"
-
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type Piece []byte
 
-const KEYSIZE = 0x20 // AES-256
-var CHKSIZE = crypto.SHA256.Size()
+const KEYSIZE uint8 = 0x20 // AES-256
+var LOOKUP_SIZE uint8 = uint8(sha256.Size)
+
+// eh, this could be false but it'll not compile if ever so
+const KIV_SIZE = KEYSIZE
 
 var makeHash = sha256.Sum256
 
+type Hash [sha256.Size]byte
+
+// an abstract key/value store. A leveldb can work for this.
+type KeyValueStore interface {
+	// don't necessarily put, but definitely queue it up.
+	Put(Hash, []byte) error
+	Get(Hash) ([]byte, error)
+	Flush() error
+}
+
+/* This is actually a pair, of a key and a um...
+When you insert a piece, it is encrypted first by the key, using a blank iv
+since keys aren't repeated. The encrypted piece is hashed, giving you a hash
+not of the content of the piece, but of its encrypted content. Choosing a key
+based on the content hash will ensure the encrypted content hash doesn't change
+every time you encrypt.
+So this is a pair of a key, and a content hash of an encrypted piece. Thus it's
+a encrypted content hash key / key, not a content hash key. But CHK is easier
+to remember, and "lookup" sounds more readable than "encrypted content hash key"
+*/
+
 type CHK struct {
-	key  [KEYSIZE]byte
-	echk [CHKSIZE]byte
+	key    [KEYSIZE]byte
+	lookup Hash
+}
+
+/* derive the key from the content hash, allow for a bump in case our
+content hash gets targeted by haters. Or derive from a password idk
+*/
+func DeriveKey(piece []byte, bump []byte) [KEYSIZE]byte {
+	var key [KEYSIZE]byte
+	if bump != nil {
+		input = append(input, bump...)
+	}
+	copy(key[:KEYSIZE], makeHash(input)[:])
+	return key
 }
 
 type tier []CHK
 type tiers []tier
 
-type hashdb struct {
-	store *leveldb.DB
+/* An interface to a leveldb backed (?) hash database */
+type DB struct {
+	store KeyValueStore
 	tiers tiers
 }
 
-func HashTreeDB(place string) {
-	return hashdb{
-		store: tierdb.Open(place, &ldb.Options{
+func New(store KeyValueStore) {
+	return DB{
+		store: store,
+		/*leveldb.Open(place, &ldb.Options{
 			// 128 mibibytes
 			WriteBufferSize: 0x8000000,
 			// compression on encrypted pieces?
 			Compression: ldb.NoCompression,
 			// storing 0xffff sized pieces, ey?
 			BlockSize: 0x10000,
-		}),
+		}),*/
 	}
 }
 
+// size of the serialized CHK (key, lookup)
+const CHK_SIZE = KEYSIZE + LOOKUP_SIZE
+
 func explode(piece []byte) []hash {
-	tier = make([]hash, len(piece)/(KEYSIZE+CHKSIZE))
+	tier = make([]hash, len(piece)/CHK_SIZE)
 	for i, _ := range tier {
 		tier[i] = CHK{
-			key:  piece[i*(CHKSIZE+KEYSIZE) : i*(CHKSIZE+KEYSIZE)+KEYSIZE],
-			echk: piece[i*(CHKSIZE+KEYSIZE)+KEYSIZE : (i+1)*(CHKSIZE+KEYSIZE)],
+			key:    piece[i*CHK_SIZE : i*CHK_SIZE+KEYSIZE],
+			lookup: piece[i*CHK_SIZE+KEYSIZE : (i+1)*CHK_SIZE],
 		}
 	}
 	return tier
@@ -59,10 +99,10 @@ func conjoin(tier tier) []byte {
 	// mumble mumble, something with cap, save the underlying piece
 	// can't do that while inserting though!
 
-	r = make([]byte, len(tier)*(KEYSIZE+CHKSIZE))
+	r = make([]byte, len(tier)*CHK_SIZE)
 	for i, chk := range tier {
-		r[i*(CHKSIZE+KEYSIZE) : i*(CHKSIZE+KEYSIZE)+KEYSIZE] = chk.key
-		r[i*(CHKSIZE+KEYSIZE)+KEYSIZE : (i+1)*(CHKSIZE+KEYSIZE)] = chk.hash
+		r[i*CHK_SIZE : i*CHK_SIZE+KEYSIZE] = chk.key
+		r[i*CHK_SIZE+KEYSIZE : (i+1)*CHK_SIZE] = chk.hash
 	}
 	return r
 }
@@ -87,8 +127,9 @@ func (h hashdb) borrow(level uint8) {
 	return h.Extract(nexthash)
 }
 
-func (h hashdb) Export(chk []byte, dest *io.Writer) error {
-	if len(chk) != CHKSIZE {
+// export a hash tree to a writer, given its root
+func (h hashdb) Export(chk CHK, dest *io.Writer) error {
+	if len(chk) != LOOKUP_SIZE {
 		return BadCHK(chk)
 	}
 	depth := chk[0]
@@ -96,8 +137,8 @@ func (h hashdb) Export(chk []byte, dest *io.Writer) error {
 
 	h.tiers = make([]Tier, depth)
 	var mchk = CHK{
-		key:  chk[1:KEYSIZE],
-		echk: chk[KEYSIZE:],
+		key:    chk[1:KEYSIZE],
+		lookup: chk[KEYSIZE:],
 	}
 	h.tiers[depth-1] = []tier{mchk} // and everything below it is 0
 	for piece := h.borrow(); piece; piece = h.borrow() {
@@ -124,7 +165,7 @@ func (h hashdb) carry(hash s, level int) {
 	} else {
 		tier = h.tiers[level]
 		tier = append(tier, hash)
-		if len(tier) > CHKPERPIECE {
+		if len(tier) > CHK_PER_PIECE {
 			new = h.Insert(conjoin(tier))
 			h.tiers[level] = []tier{}
 			carry(new, level+1)
@@ -136,7 +177,7 @@ func (h hashdb) Import(reader *io.Reader) (depth uint8, root CHK) {
 	if len(h.tiers) != 0 {
 		panic("ugh, concurrency")
 	}
-	p := make([]byte, MAXPIECESIZE)
+	p := make([]byte, MAX_PIECE_SIZE)
 	for {
 		n, err := reader.Read(p)
 		if n <= 0 {
@@ -153,35 +194,35 @@ func (h hashdb) Import(reader *io.Reader) (depth uint8, root CHK) {
 	}
 }
 
-func (h hashdb) Insert(piece []byte) CHK {
-	iv := make([]byte, calgo.BlockSize)
+var ziv [calgo.BlockSize]byte // just leave this zero
+
+func (h hashdb) Insert(piece []byte) (CHK, error) {
 	key := make([]byte, 0x20)
 	rand.Rand(key)
 	block, err := calgo.NewCipher(key)
 	if err != nil {
 		panic(err)
 	}
-	rand.Rand(iv)
-	stream := cipher.NewCtr(block, iv)
+	stream := cipher.NewCtr(block, ziv)
 
 	// hmm, this is destructive...
 	stream.XORKeyStream(piece, piece)
-	echk := makeHash(piece)
-	// remember MAXPIECESIZE must be 0xffff /minus/ the size of an IV
-	// and maybe a command byte or something
-	h.ldb.Put(echk, append(iv, piece...))
-	return CHK{
-		key:  key,
-		echk: echk,
+	lookup := makeHash(piece)
+	if h.store.Put(lookup, piece); err != nil {
+		return nil, err
 	}
+	return CHK{
+		key:    key,
+		lookup: lookup,
+	}, nil
 }
 
-func (h hashdb) Extract(chk CHK) []byte {
+func (h hashdb) Extract(chk CHK) ([]byte, error) {
 	var piece []byte
 	for {
-		if piece, err = h.ldb.Get(chk.echk); err != nil {
+		if piece, err = h.ldb.Get(chk.lookup); err != nil {
 			// check if not found error
-			h.Fetch(chk.echk)
+			h.Fetch(chk.lookup)
 		} else {
 			break
 		}
@@ -190,10 +231,7 @@ func (h hashdb) Extract(chk CHK) []byte {
 	if err != nil {
 		panic(err)
 	}
-	iv = piece[:IVLEN]
-	piece = piece[IVLEN:]
-
-	stream := cipher.NewCtr(block, iv)
+	stream := cipher.NewCtr(block, ziv)
 	stream.XORKeyStream(piece, piece)
 
 	return piece
