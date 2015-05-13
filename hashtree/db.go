@@ -6,6 +6,7 @@ import (
 	"crypto/sha256" // this is hard to generalize
 	"io"
 	"os"
+	"sync"
 	// blowfish, salsa20, whatever
 )
 
@@ -21,20 +22,26 @@ const IV_SIZE = KEYSIZE
 const CHK_SIZE = KEYSIZE + LOOKUP_SIZE
 
 const MAX_PIECE_SIZE = uint(0xffff)
-const MAX_ADJ_PIECE_SIZE = MAX_PIECE_SIZE - uint(IV_SIZE)
+const MAX_EFFECTIVE_PIECE_SIZE = MAX_PIECE_SIZE - uint(IV_SIZE) - 5
 
-const CHK_PER_PIECE = MAX_ADJ_PIECE_SIZE / uint(CHK_SIZE)
+const CHK_PER_PIECE = MAX_EFFECTIVE_PIECE_SIZE / uint(CHK_SIZE)
 
 var makeHash = sha256.Sum256
 
-type Hash [sha256.Size]byte
+const HashSize = sha256.Size
 
-// an abstract key/value store. A leveldb can work for this.
+type Hash [HashSize]byte
+
+// an abstract key/value Store. A leveldb can work for this.
 type KeyValueStore interface {
 	// don't necessarily put, but definitely queue it up.
 	Put(Hash, []byte) error
 	Get(Hash) ([]byte, error)
 	Close() error
+}
+
+type Fetcher interface {
+	Fetch(Hash) error
 }
 
 /* This is actually a pair, of a key and a um...
@@ -49,8 +56,8 @@ to remember, and "lookup" sounds more readable than "encrypted content hash key"
 */
 
 type CHK struct {
-	key    [KEYSIZE]byte
-	lookup Hash
+	Key    [KEYSIZE]byte
+	Lookup Hash
 }
 
 /* derive the key from the content hash, allow for a bump in case our
@@ -71,14 +78,22 @@ type tiers []tier
 
 /* An interface to a leveldb backed (?) hash database */
 type DB struct {
-	store KeyValueStore
+	Store KeyValueStore
+	fetcher Fetcher
 	tiers tiers
-	err error
+	err   error
+	recovery_handler func(x interface{}) error
+	wlock sync.Mutex
 }
 
-func New(store KeyValueStore) DB {
+func New(
+	Store KeyValueStore,
+	fetcher Fetcher,
+	recovery_handler func (x interface{}) error) DB {
 	self := DB{
-		store: store,
+		Store: Store,
+		fetcher: fetcher,
+		recovery_handler: recovery_handler,
 	}
 
 	return self
@@ -88,8 +103,8 @@ func explode(piece []byte) tier {
 	var tier = make(tier, len(piece)/int(CHK_SIZE))
 	for i, _ := range tier {
 		t := CHK{}
-		copy(t.key[:],piece[i*int(CHK_SIZE) : i*int(CHK_SIZE+KEYSIZE)])
-		copy(t.lookup[:],piece[i*int(CHK_SIZE+KEYSIZE) : (i+1)*int(CHK_SIZE)])
+		copy(t.Key[:], piece[i*int(CHK_SIZE):i*int(CHK_SIZE+KEYSIZE)])
+		copy(t.Lookup[:], piece[i*int(CHK_SIZE+KEYSIZE):(i+1)*int(CHK_SIZE)])
 		tier[i] = t
 	}
 	return tier
@@ -101,8 +116,8 @@ func conjoin(tier tier) []byte {
 
 	r := make([]byte, len(tier)*int(CHK_SIZE))
 	for i, chk := range tier {
-		copy(r[i*int(CHK_SIZE) : i*int(CHK_SIZE+KEYSIZE)],chk.key[:])
-		copy(r[i*int(CHK_SIZE+KEYSIZE) : (i+1)*int(CHK_SIZE)], chk.lookup[:])
+		copy(r[i*int(CHK_SIZE):i*int(CHK_SIZE+KEYSIZE)], chk.Key[:])
+		copy(r[i*int(CHK_SIZE+KEYSIZE):(i+1)*int(CHK_SIZE)], chk.Lookup[:])
 	}
 	return r
 }
@@ -128,37 +143,117 @@ func (h DB) borrow(level uint8) []byte {
 }
 
 type Root struct {
-	chk CHK
-	depth uint8
+	CHK   CHK
+	Depth uint8
 }
 
-
-
 // export a hash tree to a writer, given its root
-func (h DB) Export(key Root, dest io.Writer) error {
-	at := 0
+func (h DB) ExportStream(key Root, dest io.Writer) (fail error) {
+	defer func() {
+		fail = recover().(error)
+	}()
 
-	h.tiers = make([]tier, key.depth)
-	h.tiers[key.depth-1] = tier{key.chk} // and everything below it is 0
+	h.tiers = make([]tier, key.Depth)
+	h.tiers[key.Depth-1] = tier{key.CHK} // and everything below it is 0
 	for piece := h.borrow(0); piece != nil; piece = h.borrow(0) {
 		if n, err := dest.Write(piece); err != nil {
 			return err
+		} else if n != len(piece) {
+			panic("Partial write")
 		}
 	}
-	if(h.err != nil) {
+	if h.err != nil {
 		return h.err
 	}
 	return nil
-		
+
 }
 
-func (h DB) ExportFile(key Root, dest string) error {
+func (h DB) export_parallel(chk CHK,
+	breadth int64,
+	depth uint8,
+	dest io.WriteSeeker,
+	parent *sync.WaitGroup) {
+
+	// probably good to guarantee Done by defer, but not Wait unless
+	// successfully dispatched
+	defer parent.Done()
+
+	defer func() {		
+		if x := recover(); x != nil {			
+			h.err = h.recovery_handler(x)
+		}
+	}()
+
+	piece := h.Extract(chk)
+	if depth == 0 {
+		h.wlock.Lock()
+		defer h.wlock.Unlock()
+		_, err := dest.Seek(breadth*int64(MAX_EFFECTIVE_PIECE_SIZE), 0)
+		if err != nil {
+			panic(err)
+		}
+		n, err := dest.Write(piece)
+		if err != nil {
+			panic(err)
+		}
+		if n != len(piece) {
+			panic("Partial disk write")
+		}
+		return
+	}
+	head := breadth * int64(MAX_EFFECTIVE_PIECE_SIZE)
+	chks := explode(piece)
+	var wait = sync.WaitGroup{}
+	wait.Add(len(chks))
+	for i, chk := range chks {
+		// XXX: should probably have error reporting wrapper
+		go h.export_parallel(chk,
+			head+int64(i)*int64(MAX_EFFECTIVE_PIECE_SIZE),
+			depth-1,
+			dest,
+			&wait)
+	}
+	wait.Wait()
+}
+
+// export a hash tree to a writer, in parallel, with swarming!
+func (h DB) Export(root Root, dest io.WriteSeeker) {
+	if h.err != nil {
+		panic(h.err)
+	}
+	var wait = sync.WaitGroup{}
+	wait.Add(1)
+	h.export_parallel(root.CHK, 0, root.Depth, dest, &wait)
+	wait.Wait()
+	/* there could be several errors along the way,
+	network failures, disk failures, timeouts, user cancellation, should
+	use an error handler, not return a single error for all the things
+	that may have went wrong during this export. 
+...but we still need to know whether the file is done or not.
+*/
+	if h.err != nil {
+		panic(h.err)
+	}
+}
+
+func (h DB) ExportFile(key Root, dest string) {
 	f, err := os.Create(dest + ".tmp")
 	if err != nil {
-		return err
+		panic(err)
 	}
 	defer f.Close()
-	return h.Export(key, f)
+	h.Export(key, f)
+	f.Sync()
+	err = os.Rename(dest + ".tmp",dest)
+	if err != nil {
+		println("MS sucks")
+		os.Remove(dest)
+		err := os.Rename(dest+".tmp",dest)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func (h DB) carry(chk CHK, level int) {
@@ -187,6 +282,12 @@ func (h DB) Import(reader io.Reader) (depth uint8, root CHK) {
 		if n <= 0 {
 			break
 		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
 		new := h.Insert(p[:n])
 		h.carry(new, 0)
 	}
@@ -213,28 +314,32 @@ func (h DB) Insert(piece []byte) CHK {
 	// hmm, this is destructive...
 	stream.XORKeyStream(piece, piece)
 	lookup := makeHash(piece)
-	if h.store.Put(lookup, piece); err != nil {
+	if h.Store.Put(lookup, piece); err != nil {
 		panic(err)
 	}
 	return CHK{
-		key:    key,
-		lookup: lookup,
+		Key:    key,
+		Lookup: lookup,
 	}
 }
 
 func (h DB) Extract(chk CHK) []byte {
 	var piece []byte
+	var err error
 	for {
-		if piece, err := h.store.Get(chk.lookup); err != nil {
-			// check if not found error
-			if err := h.Fetch(chk.lookup); err != nil {
-				panic(err);
+		if piece, err = h.Store.Get(chk.Lookup); err != nil {
+			err = h.fetcher.Fetch(chk.Lookup)
+			if err != nil {
+				panic(err)
+			}
+			if piece, err = h.Store.Get(chk.Lookup); err != nil {
+				panic(err)
 			}
 		} else {
 			break
 		}
 	}
-	block, err := calgo.NewCipher(chk.key[:])
+	block, err := calgo.NewCipher(chk.Key[:])
 	if err != nil {
 		panic(err)
 	}

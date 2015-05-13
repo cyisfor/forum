@@ -4,4 +4,6 @@ Can save time queued to measure how long avg wait time is.
 
 Queue is in-memory set, but appending log file, on load, load log entries into set. On “want” check if in set, if so, do nothing, if not, append to log file and add to set. When deleting from set, append “deletion” to log file, and increment in-memory deletion counter. Deletion counter too high, schedule log rotation, write all keys to a second log w/ no deletion records, then overwrite previous log, set deletion count to 0.
 
-Now how to pick peers to ask for pieces? Keep last requested vs first requested times, num requests that failed to gauge importance?
+Now how to pick peers to ask for pieces? Keep last requested vs first requested times, num requests that failed to gauge importance? Important pieces = rep boost? Connect pieces higher on hash tree w/ same peers? Heuristically? Temp boost rep until done w/ tree, when a higher piece “came from” a certain peer?
+
+Rep = estimated likelihood a peer will be able to supply us with a piece we request of it. Could vary depending on what kind of piece... some places only store indexes etc.
