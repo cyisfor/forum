@@ -1,11 +1,13 @@
 package main
 
 import (
-	"http"
+	"net/http"
 	"log"
 	"net/url"
 	"os/user"
 	"path/filepath"
+	// relative imports???
+	"derp/cy/forum/hashtree"
 )
 
 func buildDir(root string, components ...string) string {
@@ -90,6 +92,12 @@ func listenForPieces(db) {
 	var buf = make([]byte, MAXPIECESIZE)
 	for {
 		n, addr, err := pn.ReadFrom(buf)
+		/* TODO: every time a piece comes in, if it's a signature piece, (what about signature pieces that aren't aimed at us? like someone wants to store their messages on our computer?) then pass its root to the message database, a second database that stores messages that have arrived, and re-exports them to examine their metadata, and stuff.
+
+		Be sure to identify every signature piece ENCRYPTED to us, because that means it's a private message for one of our identities.
+
+				The folder display should use this second database to show folders, not query the entire hashtree database every time. But the second database ONLY has metadata and root hashes, so to get the actual messages you use the first database to figure what to send over the wire.
+		*/
 		// sophisticated reputation management:
 		print("got", db.Import(buf[:n]), "from", addr)
 	}
@@ -110,7 +118,7 @@ func sendPiece(piece []byte, dest net.Addr) {
 
 func main() {
 	base = buildDir(user.Current().HomeDir, ".local", "forum")
-	db = HashTreeDB(filepath.Join(base, "pieces.leveldb"))
+	db = hashtree.New(filepath.Join(base, "pieces.leveldb"))
 
 	go listenForPieces(db)
 
@@ -138,7 +146,7 @@ func main() {
 	static = buildDir(base, "static")
 
 	http.Handle("/static/", http.FileServer(http.Dir(static)))
-	http.Handle("/", MessageListDisplayer{})
+	http.Handle("/", display.New(hashtree.DB))
 	//http.Handle("/message", MessageFormatter{})
 	http.HandleFunc("/chk/", func(w http.ResponseWriter, r *http.Request) {
 		path, err := parsePath(r.URL.Path)

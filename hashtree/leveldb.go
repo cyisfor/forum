@@ -7,45 +7,23 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
-// a wrapper for leveldb that is easier to write, but doesn't guarantee
-// an arriving piece will be available to Get until after the Flush
+// a wrapper for leveldb that handles read/write options
 
 type LevelDB struct {
 	// don't bother with promotions
-	l       *leveldb.LevelDB
-	pending *leveldb.Batch
+	l *leveldb.DB
 }
 
-const CUTOFF = 0x10
-
-func (d LevelDB) Put(Hash k, byte []v) error {
-	if d.pending == nil {
-		d.pending = new(leveldb.Batch)
-	}
-	d.pending.Put(k, v)
-	if len(d.pending) > CUTOFF {
-		return d.Flush()
-	}
-	return nil
+func (d LevelDB) Put(k Hash, v []byte) error {
+	return d.l.Put(k[:], v, nil)
 }
 
-func (d LevelDB) Flush() error {
-	pending := d.pending
-	d.pending = nil
-	return d.l.Write(d.pending)
-}
-
-func (d LevelDB) Get(Hash k) ([]byte, error) {
-	if d.pending != nil {
-		if err := d.Flush(); err != nil {
-			return nil, err
-		}
-	}
+func (d LevelDB) Get(k Hash) ([]byte, error) {
+	return d.l.Get(k[:], nil)
 }
 
 func (d LevelDB) Close() error {
-	err := d.Flush()
-	d.l.Close()
+	return d.l.Close()
 }
 
 func LevelDBCreate(path string) KeyValueStore {

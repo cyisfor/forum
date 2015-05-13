@@ -1,0 +1,7 @@
+When piece not found, add to queue, wait a little, then give up, but LEAVE in queue
+
+Can save time queued to measure how long avg wait time is.
+
+Queue is in-memory set, but appending log file, on load, load log entries into set. On “want” check if in set, if so, do nothing, if not, append to log file and add to set. When deleting from set, append “deletion” to log file, and increment in-memory deletion counter. Deletion counter too high, schedule log rotation, write all keys to a second log w/ no deletion records, then overwrite previous log, set deletion count to 0.
+
+Now how to pick peers to ask for pieces? Keep last requested vs first requested times, num requests that failed to gauge importance?

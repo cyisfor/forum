@@ -1,21 +1,29 @@
 package hashtree
 
 import (
-	calgo "aes"
+	calgo "crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256" // this is hard to generalize
 	"io"
 	"os"
-	"sync" // blowfish, salsa20, whatever
+	// blowfish, salsa20, whatever
 )
 
 type Piece []byte
 
 const KEYSIZE uint8 = 0x20 // AES-256
-var LOOKUP_SIZE uint8 = uint8(sha256.Size)
+const LOOKUP_SIZE uint8 = uint8(sha256.Size)
 
 // eh, this could be false but it'll not compile if ever so
-const KIV_SIZE = KEYSIZE
+const IV_SIZE = KEYSIZE
+
+// size of the serialized CHK (key, lookup)
+const CHK_SIZE = KEYSIZE + LOOKUP_SIZE
+
+const MAX_PIECE_SIZE = uint(0xffff)
+const MAX_ADJ_PIECE_SIZE = MAX_PIECE_SIZE - uint(IV_SIZE)
+
+const CHK_PER_PIECE = MAX_ADJ_PIECE_SIZE / uint(CHK_SIZE)
 
 var makeHash = sha256.Sum256
 
@@ -26,7 +34,6 @@ type KeyValueStore interface {
 	// don't necessarily put, but definitely queue it up.
 	Put(Hash, []byte) error
 	Get(Hash) ([]byte, error)
-	Flush() error
 	Close() error
 }
 
@@ -49,12 +56,13 @@ type CHK struct {
 /* derive the key from the content hash, allow for a bump in case our
 content hash gets targeted by haters. Or derive from a password idk
 */
-func DeriveKey(piece []byte, bump []byte) [KEYSIZE]byte {
+func DeriveKey(input []byte, bump []byte) [KEYSIZE]byte {
 	var key [KEYSIZE]byte
 	if bump != nil {
 		input = append(input, bump...)
 	}
-	copy(key[:KEYSIZE], makeHash(input)[:])
+	derp := makeHash(input)
+	copy(key[:KEYSIZE], derp[:])
 	return key
 }
 
@@ -65,65 +73,24 @@ type tiers []tier
 type DB struct {
 	store KeyValueStore
 	tiers tiers
-	dirty bool
-	flush sync.Cond
+	err error
 }
-
-/*
-Flushes happen by themselves in batches, but some might hang out at the end
-indefinitely, if writes stop. So when the last write stops, a goroutine should
-sleep until the time of that write plus a delay, and if no writes adjusted
-the timer since, it should flush to clear out the last bit of pending writes
-
-tl;dr every write sets flushTime = time.Now().add(FLUSH_DELAY) then signals the flusher, and the flusher waits on a condition, then sleeps for flushTime.Sub(time.Now()), then checks if flushTime < time.Now()
-if yes, then flush and wait on condition. if no, then sleep again until yes
-*/
-
-const FLUSH_DELAY = 10
 
 func New(store KeyValueStore) DB {
 	self := DB{
 		store: store,
-		flush: sync.Cond(sync.Mutex{}),
 	}
-
-	go func() {
-		for {
-			self.flush.Lock()
-			for self.flushTime.Before(time.Now()) {
-				// only wait if nothing wrote needing a flush!
-				self.flush.Wait()
-			}
-			// check if we need to do anything
-			for self.flushTime.After(time.Now()) {
-				self.flush.Unlock()
-				time.Sleep(self.flushTime.Sub(time.Now()))
-				self.flush.Lock()
-			}
-			self.flush.Unlock()
-			// time to flush!
-			self.store.Flush()
-
-			time.sleep(FLUSH_DELAY)
-			self.dirty = false
-			self.flush.Unlock()
-			self.store.Flush()
-		}
-	}()
 
 	return self
 }
 
-// size of the serialized CHK (key, lookup)
-const CHK_SIZE = KEYSIZE + LOOKUP_SIZE
-
-func explode(piece []byte) []hash {
-	tier = make([]hash, len(piece)/CHK_SIZE)
+func explode(piece []byte) tier {
+	var tier = make(tier, len(piece)/int(CHK_SIZE))
 	for i, _ := range tier {
-		tier[i] = CHK{
-			key:    piece[i*CHK_SIZE : i*CHK_SIZE+KEYSIZE],
-			lookup: piece[i*CHK_SIZE+KEYSIZE : (i+1)*CHK_SIZE],
-		}
+		t := CHK{}
+		copy(t.key[:],piece[i*int(CHK_SIZE) : i*int(CHK_SIZE+KEYSIZE)])
+		copy(t.lookup[:],piece[i*int(CHK_SIZE+KEYSIZE) : (i+1)*int(CHK_SIZE)])
+		tier[i] = t
 	}
 	return tier
 }
@@ -132,20 +99,20 @@ func conjoin(tier tier) []byte {
 	// mumble mumble, something with cap, save the underlying piece
 	// can't do that while inserting though!
 
-	r = make([]byte, len(tier)*CHK_SIZE)
+	r := make([]byte, len(tier)*int(CHK_SIZE))
 	for i, chk := range tier {
-		r[i*CHK_SIZE : i*CHK_SIZE+KEYSIZE] = chk.key
-		r[i*CHK_SIZE+KEYSIZE : (i+1)*CHK_SIZE] = chk.hash
+		copy(r[i*int(CHK_SIZE) : i*int(CHK_SIZE+KEYSIZE)],chk.key[:])
+		copy(r[i*int(CHK_SIZE+KEYSIZE) : (i+1)*int(CHK_SIZE)], chk.lookup[:])
 	}
 	return r
 }
 
-func (h hashdb) borrow(level uint8) {
+func (h DB) borrow(level uint8) []byte {
 	// now treat tiers like a number, with each tier being a digit
 	// and subtract 1 piece at a time until you're at 0
-	tier = h.tiers[level]
+	var tier = h.tiers[level]
 	if len(tier) == 0 {
-		if level >= len(h.tiers) {
+		if int(level) >= len(h.tiers) {
 			return nil
 		}
 		piece := h.borrow(level + 1)
@@ -160,53 +127,57 @@ func (h hashdb) borrow(level uint8) {
 	return h.Extract(nexthash)
 }
 
+type Root struct {
+	chk CHK
+	depth uint8
+}
+
+
+
 // export a hash tree to a writer, given its root
-func (h hashdb) Export(chk CHK, dest *io.Writer) error {
-	if len(chk) != LOOKUP_SIZE {
-		return BadCHK(chk)
-	}
-	depth := chk[0]
+func (h DB) Export(key Root, dest io.Writer) error {
 	at := 0
 
-	h.tiers = make([]Tier, depth)
-	var mchk = CHK{
-		key:    chk[1:KEYSIZE],
-		lookup: chk[KEYSIZE:],
-	}
-	h.tiers[depth-1] = []tier{mchk} // and everything below it is 0
-	for piece := h.borrow(); piece; piece = h.borrow() {
+	h.tiers = make([]tier, key.depth)
+	h.tiers[key.depth-1] = tier{key.chk} // and everything below it is 0
+	for piece := h.borrow(0); piece != nil; piece = h.borrow(0) {
 		if n, err := dest.Write(piece); err != nil {
-			panic(err)
+			return err
 		}
 	}
+	if(h.err != nil) {
+		return h.err
+	}
+	return nil
+		
 }
 
-func (h hashdb) ExportFile(chk []byte, dest string) error {
-	if f, err := os.Create(dest + ".tmp"); err != nil {
-		return error
+func (h DB) ExportFile(key Root, dest string) error {
+	f, err := os.Create(dest + ".tmp")
+	if err != nil {
+		return err
 	}
 	defer f.Close()
-	return h.Export(chk, f)
+	return h.Export(key, f)
 }
 
-func (h hashdb) carry(hash s, level int) {
+func (h DB) carry(chk CHK, level int) {
 	if level == 0 && len(h.tiers) == 0 {
-		h.tiers = []tier{{hash}}
+		h.tiers = []tier{[]CHK{chk}}
 	} else if len(h.tiers) < level {
-		tier = []hash{hash}
-		h.tiers = append(h.tiers, tier)
+		h.tiers = append(h.tiers, tier{chk})
 	} else {
-		tier = h.tiers[level]
-		tier = append(tier, hash)
-		if len(tier) > CHK_PER_PIECE {
-			new = h.Insert(conjoin(tier))
-			h.tiers[level] = []tier{}
-			carry(new, level+1)
+		var tiero = h.tiers[level]
+		tiero = append(tiero, chk)
+		if uint(len(tiero)) > CHK_PER_PIECE {
+			var chk = h.Insert(conjoin(tiero))
+			h.tiers[level] = tier{}
+			h.carry(chk, level+1)
 		}
 	}
 }
 
-func (h hashdb) Import(reader *io.Reader) (depth uint8, root CHK) {
+func (h DB) Import(reader io.Reader) (depth uint8, root CHK) {
 	if len(h.tiers) != 0 {
 		panic("ugh, concurrency")
 	}
@@ -219,51 +190,55 @@ func (h hashdb) Import(reader *io.Reader) (depth uint8, root CHK) {
 		new := h.Insert(p[:n])
 		h.carry(new, 0)
 	}
-	depth := len(h.tiers) // XXX: +1 ?
+	depth = uint8(len(h.tiers)) // XXX: +1 ?
 	toptier := h.tiers[len(h.tiers)-1]
 	if len(toptier) != 1 {
 		new := h.Insert(conjoin(toptier))
 		return depth, new
 	}
+	// XXX: um.....
+	panic("Never reach here...?")
 }
 
 var ziv [calgo.BlockSize]byte // just leave this zero
 
-func (h hashdb) Insert(piece []byte) (CHK, error) {
+func (h DB) Insert(piece []byte) CHK {
 	key := DeriveKey(piece, nil)
-	block, err := calgo.NewCipher(key)
+	block, err := calgo.NewCipher(key[:])
 	if err != nil {
 		panic(err)
 	}
-	stream := cipher.NewCtr(block, ziv)
+	stream := cipher.NewCTR(block, ziv[:])
 
 	// hmm, this is destructive...
 	stream.XORKeyStream(piece, piece)
 	lookup := makeHash(piece)
 	if h.store.Put(lookup, piece); err != nil {
-		return nil, err
+		panic(err)
 	}
 	return CHK{
 		key:    key,
 		lookup: lookup,
-	}, nil
+	}
 }
 
-func (h hashdb) Extract(chk CHK) ([]byte, error) {
+func (h DB) Extract(chk CHK) []byte {
 	var piece []byte
 	for {
-		if piece, err = h.store.Get(chk.lookup); err != nil {
+		if piece, err := h.store.Get(chk.lookup); err != nil {
 			// check if not found error
-			h.Fetch(chk.lookup)
+			if err := h.Fetch(chk.lookup); err != nil {
+				panic(err);
+			}
 		} else {
 			break
 		}
 	}
-	block, err := calgo.NewCipher(chk.key)
+	block, err := calgo.NewCipher(chk.key[:])
 	if err != nil {
 		panic(err)
 	}
-	stream := cipher.NewCtr(block, ziv)
+	stream := cipher.NewCTR(block, ziv[:])
 	stream.XORKeyStream(piece, piece)
 
 	return piece
